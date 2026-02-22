@@ -1,0 +1,88 @@
+[tools]
+terraform = "1.14"
+talosctl = "1.12"
+sops = "3.12"
+age = "1.3"
+kubectl = "1.32"
+tflint = "0.61"
+lefthook = "2.1"
+gitleaks = "8.30"
+
+[env]
+SOPS_AGE_KEY_FILE = "{{config_root}}/.age-key.txt"
+
+[tasks.setup]
+description = "Install tools, initialize tflint, install lefthook"
+run = """
+mise install
+cd terraform && tflint --init && terraform init
+lefthook install
+"""
+
+[tasks."tf:init"]
+description = "Initialize Terraform providers"
+dir = "terraform"
+run = "terraform init"
+
+[tasks."tf:plan"]
+description = "Preview Terraform changes"
+dir = "terraform"
+run = "terraform plan {{arg(name=\"extra\", var=true)}}"
+
+[tasks."tf:apply"]
+description = "Apply Terraform and encrypt outputs"
+dir = "terraform"
+run = """
+terraform apply {{arg(name="extra", var=true)}}
+mise run tf:export-configs
+"""
+
+[tasks."tf:check"]
+description = "Run fmt check, validate, and tflint"
+dir = "terraform"
+run = """
+terraform fmt -check
+terraform validate
+tflint
+"""
+
+[tasks."tf:destroy"]
+description = "Destroy all Terraform-managed infrastructure"
+dir = "terraform"
+run = "terraform destroy {{arg(name=\"extra\", var=true)}}"
+
+[tasks."tf:output"]
+description = "Show Terraform outputs"
+dir = "terraform"
+run = "terraform output {{arg(name=\"extra\", var=true)}}"
+
+[tasks."tf:state"]
+description = "List Terraform state resources"
+dir = "terraform"
+run = "terraform state list"
+
+[tasks."tf:export-configs"]
+description = "Extract and encrypt talosconfig and kubeconfig"
+dir = "terraform"
+run = """
+set -e
+mkdir -p output
+terraform output -raw talosconfig > output/talosconfig.yaml
+sops encrypt output/talosconfig.yaml > output/talosconfig.enc.yaml
+rm output/talosconfig.yaml
+terraform output -raw kubeconfig > output/kubeconfig.yaml
+sops encrypt output/kubeconfig.yaml > output/kubeconfig.enc.yaml
+rm output/kubeconfig.yaml
+"""
+
+[tasks."tf:use-configs"]
+description = "Decrypt configs to ~/.talos and ~/.kube"
+run = """
+mkdir -p ~/.talos ~/.kube
+sops decrypt terraform/output/talosconfig.enc.yaml > ~/.talos/config
+sops decrypt terraform/output/kubeconfig.enc.yaml > ~/.kube/config
+"""
+
+[tasks."talos:upgrade"]
+description = "Upgrade TalosOS to a new version"
+run = "talosctl upgrade --image factory.talos.dev/installer/{{arg(name='schematic_id')}}:{{arg(name='version')}} --preserve"
