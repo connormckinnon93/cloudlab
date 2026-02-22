@@ -51,7 +51,6 @@ resource "talos_machine_configuration_apply" "controlplane" {
           image = "factory.talos.dev/installer/${var.talos_schematic_id}:${var.talos_version}"
         }
         network = {
-          hostname = var.vm_name
           interfaces = [{
             deviceSelector = {
               driver = "virtio_net"
@@ -76,6 +75,12 @@ resource "talos_machine_configuration_apply" "controlplane" {
       cluster = {
         allowSchedulingOnControlPlanes = true
       }
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "HostnameConfig"
+      auto       = "off"
+      hostname   = var.vm_name
     }),
   ]
 }

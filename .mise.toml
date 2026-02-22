@@ -71,12 +71,10 @@ dir = "terraform"
 run = """
 set -e
 mkdir -p output
-terraform output -raw talosconfig > output/talosconfig.yaml
-sops encrypt output/talosconfig.yaml > output/talosconfig.enc.yaml
-rm output/talosconfig.yaml
-terraform output -raw kubeconfig > output/kubeconfig.yaml
-sops encrypt output/kubeconfig.yaml > output/kubeconfig.enc.yaml
-rm output/kubeconfig.yaml
+terraform output -raw talosconfig > output/talosconfig.enc.yaml
+sops encrypt -i output/talosconfig.enc.yaml
+terraform output -raw kubeconfig > output/kubeconfig.enc.yaml
+sops encrypt -i output/kubeconfig.enc.yaml
 """
 
 [tasks."tf:use-configs"]
