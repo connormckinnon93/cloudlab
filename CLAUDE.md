@@ -72,4 +72,12 @@ Lefthook runs `tf:check` automatically on pre-commit for `.tf` file changes. Git
 
 - Proxmox host: Lenovo ThinkCentre M710q (i5-7th gen, 32 GB RAM, 512 GB NVMe)
 - TalosOS v1.12.4 with Secure Boot, extensions: qemu-guest-agent, nfs-utils
+- VM uses fixed MAC address (`BC:24:11:CA:FE:01`) for DHCP reservation
 - Synology NAS available for NFS persistent volumes (future work)
+
+## Implementation Notes
+
+- **Talos 1.12 HostnameConfig**: Hostname uses the `HostnameConfig` multi-doc format (`apiVersion: v1alpha1, kind: HostnameConfig`) instead of the legacy `machine.network.hostname` field
+- **VM IP bootstrapping**: `talos_machine_configuration_apply` connects to the VM's DHCP address (via QEMU guest agent `ipv4_addresses`), not the static IP being configured. Post-reboot resources (bootstrap, kubeconfig) use the static IP.
+- **SOPS creation rules**: Files must match `\.enc\.(json|yaml)$` pattern. The `tf:export-configs` task writes directly to `.enc.yaml` filenames and uses `sops encrypt -i` (in-place)
+- **Mise task args**: Use `usage` field with `var=#true` for optional arguments (not `arg()` template function)

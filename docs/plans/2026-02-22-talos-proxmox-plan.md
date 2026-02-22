@@ -135,13 +135,15 @@ run = "terraform init"
 [tasks."tf:plan"]
 description = "Preview Terraform changes"
 dir = "terraform"
-run = "terraform plan {{arg(name=\"extra\", var=true)}}"
+usage = 'arg "[extra]" var=#true help="Extra arguments to pass to terraform plan"'
+run = "terraform plan ${usage_extra:-}"
 
 [tasks."tf:apply"]
 description = "Apply Terraform and encrypt outputs"
 dir = "terraform"
+usage = 'arg "[extra]" var=#true help="Extra arguments to pass to terraform apply"'
 run = """
-terraform apply {{arg(name="extra", var=true)}}
+terraform apply ${usage_extra:-}
 mise run tf:export-configs
 """
 
@@ -157,12 +159,14 @@ tflint
 [tasks."tf:destroy"]
 description = "Destroy all Terraform-managed infrastructure"
 dir = "terraform"
-run = "terraform destroy {{arg(name=\"extra\", var=true)}}"
+usage = 'arg "[extra]" var=#true help="Extra arguments to pass to terraform destroy"'
+run = "terraform destroy ${usage_extra:-}"
 
 [tasks."tf:output"]
 description = "Show Terraform outputs"
 dir = "terraform"
-run = "terraform output {{arg(name=\"extra\", var=true)}}"
+usage = 'arg "[extra]" var=#true help="Extra arguments to pass to terraform output"'
+run = "terraform output ${usage_extra:-}"
 
 [tasks."tf:state"]
 description = "List Terraform state resources"
@@ -175,12 +179,10 @@ dir = "terraform"
 run = """
 set -e
 mkdir -p output
-terraform output -raw talosconfig > output/talosconfig.yaml
-sops encrypt output/talosconfig.yaml > output/talosconfig.enc.yaml
-rm output/talosconfig.yaml
-terraform output -raw kubeconfig > output/kubeconfig.yaml
-sops encrypt output/kubeconfig.yaml > output/kubeconfig.enc.yaml
-rm output/kubeconfig.yaml
+terraform output -raw talosconfig > output/talosconfig.enc.yaml
+sops encrypt -i output/talosconfig.enc.yaml
+terraform output -raw kubeconfig > output/kubeconfig.enc.yaml
+sops encrypt -i output/kubeconfig.enc.yaml
 """
 
 [tasks."tf:use-configs"]
@@ -339,6 +341,12 @@ variable "talos_schematic_id" {
   type        = string
 }
 
+variable "vm_mac_address" {
+  description = "Fixed MAC address for the TalosOS VM (for DHCP reservation)"
+  type        = string
+  default     = "BC:24:11:CA:FE:01"
+}
+
 variable "vm_cpu_cores" {
   description = "Number of CPU cores for the VM"
   type        = number
@@ -439,6 +447,7 @@ resource "proxmox_virtual_environment_vm" "talos" {
   bios    = "ovmf"
   machine = "q35"
 
+  scsi_hardware   = "virtio-scsi-single"
   stop_on_destroy = true
 
   agent {
@@ -473,8 +482,9 @@ resource "proxmox_virtual_environment_vm" "talos" {
   }
 
   network_device {
-    bridge = "vmbr0"
-    model  = "virtio"
+    bridge      = "vmbr0"
+    model       = "virtio"
+    mac_address = var.vm_mac_address
   }
 
   operating_system {
@@ -506,6 +516,17 @@ git commit -m "feat: add Proxmox provider, TalosOS image download, and VM resour
 ```hcl
 provider "talos" {}
 
+# --- VM IP (for initial connection before static IP is configured) ---
+
+locals {
+  # Find the first non-loopback IPv4 address reported by the QEMU guest agent.
+  # The interface index varies by OS; flatten and filter to avoid hardcoding it.
+  vm_ip = [
+    for addr in flatten(proxmox_virtual_environment_vm.talos.ipv4_addresses) :
+    addr if addr != "127.0.0.1"
+  ][0]
+}
+
 # --- Machine Secrets ---
 
 resource "talos_machine_secrets" "this" {
@@ -536,7 +557,7 @@ data "talos_client_configuration" "this" {
 resource "talos_machine_configuration_apply" "controlplane" {
   client_configuration        = talos_machine_secrets.this.client_configuration
   machine_configuration_input = data.talos_machine_configuration.controlplane.machine_configuration
-  node                        = var.talos_node_ip
+  node                        = local.vm_ip
 
   config_patches = [
     yamlencode({
@@ -546,7 +567,6 @@ resource "talos_machine_configuration_apply" "controlplane" {
           image = "factory.talos.dev/installer/${var.talos_schematic_id}:${var.talos_version}"
         }
         network = {
-          hostname = var.vm_name
           interfaces = [{
             deviceSelector = {
               driver = "virtio_net"
@@ -572,9 +592,13 @@ resource "talos_machine_configuration_apply" "controlplane" {
         allowSchedulingOnControlPlanes = true
       }
     }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "HostnameConfig"
+      auto       = "off"
+      hostname   = var.vm_name
+    }),
   ]
-
-  depends_on = [proxmox_virtual_environment_vm.talos]
 }
 
 # --- Bootstrap ---
