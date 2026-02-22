@@ -72,7 +72,7 @@ Lefthook runs `tf:check` automatically on pre-commit for `.tf` file changes. Git
 
 - Proxmox host: Lenovo ThinkCentre M710q (i5-7th gen, 32 GB RAM, 512 GB NVMe)
 - TalosOS v1.12.4 with Secure Boot, extensions: qemu-guest-agent, nfs-utils
-- VM uses fixed MAC address (`BC:24:11:CA:FE:01`) for DHCP reservation
+- VM uses fixed MAC address (`BC:24:11:CA:FE:01`) with DHCP reservation → `192.168.20.100`
 - Synology NAS available for NFS persistent volumes (future work)
 
 ## Implementation Notes
