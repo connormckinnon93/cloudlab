@@ -19,6 +19,7 @@ Lenovo ThinkCentre M710q (i5-7th gen, 32 GB RAM, 512 GB NVMe) running Proxmox.
 | kubectl | 1.32 | Kubernetes CLI (matches Talos 1.12's K8s) |
 | tflint | 0.61 | Terraform linter |
 | lefthook | 2.1 | Git hooks manager |
+| gitleaks | 8.30 | Secret scanning |
 
 ## Terraform Providers
 
@@ -91,13 +92,14 @@ SOPS encrypts secrets with age keys. The Terraform SOPS provider decrypts inline
 
 ## Git Hooks (lefthook)
 
-Pre-commit hooks run automatically on `.tf` file changes:
+Pre-commit hooks run automatically:
 
-| Hook | Command |
-|------|---------|
-| `fmt-check` | `terraform fmt -check` |
-| `validate` | `terraform validate` |
-| `lint` | `tflint` |
+| Hook | Scope | Command |
+|------|-------|---------|
+| `fmt-check` | `.tf` files | `terraform fmt -check` |
+| `validate` | `.tf` files | `terraform validate` |
+| `lint` | `.tf` files | `tflint` |
+| `gitleaks` | All staged files | `gitleaks protect --staged` |
 
 Installed via `mise run setup`. Configuration in `lefthook.yml`.
 
