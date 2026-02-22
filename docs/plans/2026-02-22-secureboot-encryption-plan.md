@@ -46,11 +46,12 @@ Insert between the `efi_disk` closing brace and the `disk` block:
 
 ```hcl
   tpm_state {
-    version = "v2.0"
+    datastore_id = "local-lvm"
+    version      = "v2.0"
   }
 ```
 
-The virtual TPM seals LUKS2 keys to the VM's boot chain PCR measurements.
+Explicit `datastore_id` matches the `efi_disk` block's style. The virtual TPM seals LUKS2 keys to the VM's boot chain PCR measurements.
 
 **Step 3: Validate**
 
@@ -146,7 +147,9 @@ Append two new `yamlencode()` entries to the `config_patches` list, after the ex
       encryption = {
         provider = "luks2"
         keys = [{
-          tpm  = {}
+          tpm = {
+            checkSecurebootStatusOnEnroll = true
+          }
           slot = 0
         }]
       }
@@ -158,14 +161,17 @@ Append two new `yamlencode()` entries to the `config_patches` list, after the ex
       encryption = {
         provider = "luks2"
         keys = [{
-          tpm  = {}
-          slot = 0
+          tpm = {
+            checkSecurebootStatusOnEnroll = true
+          }
+          slot        = 0
+          lockToState = true
         }]
       }
     }),
 ```
 
-This follows the same multi-doc pattern as the existing `HostnameConfig` patch. Both STATE (machine config, etcd) and EPHEMERAL (container storage) partitions get LUKS2 encryption sealed to the TPM.
+This follows the same multi-doc pattern as the existing `HostnameConfig` patch. Both STATE (machine config, etcd) and EPHEMERAL (container storage) partitions get LUKS2 encryption sealed to the TPM. `checkSecurebootStatusOnEnroll` fails key enrollment if SecureBoot is not active. `lockToState` on EPHEMERAL binds its key to the STATE partition's random salt, as recommended by Talos docs for non-STATE volumes.
 
 **Step 2: Validate**
 
@@ -214,13 +220,12 @@ git commit -m "fix(mise): use SecureBoot installer in talos:upgrade task"
 ### Task 6: Reorder roadmap in README
 
 **Files:**
-- Modify: `README.md:94-106` (Phase 1 roadmap)
+- Modify: `README.md` (full roadmap — Phase 1 through Phase 6, summary line, decisions table)
+- Modify: `CLAUDE.md` (SecureBoot platform note)
 
 **Step 1: Replace Phase 1 list**
 
-Merge steps 1 and 2 into "SecureBoot + disk encryption". Move etcd backups from step 10 to step 2 (safety net before workloads). Renumber remaining steps.
-
-Replace the Phase 1 list (lines 96-105) with:
+Merge steps 1 and 2 into "SecureBoot + disk encryption". Move etcd backups from step 10 to step 2 (safety net before workloads). Replace the Phase 1 list (lines 96-105) with:
 
 ```markdown
 1. **SecureBoot + disk encryption** — EFI SecureBoot, virtual TPM, LUKS2 on STATE and EPHEMERAL partitions
@@ -234,7 +239,17 @@ Replace the Phase 1 list (lines 96-105) with:
 9. **Monitoring** — Prometheus + Grafana for metrics, dashboards, and cluster health
 ```
 
-**Step 2: Update roadmap summary line**
+**Step 2: Renumber Phases 2-6**
+
+Merging steps 1+2 and inserting etcd at step 2 shifts every step in Phases 2-6 down by one:
+
+- Phase 2: 11-14 → 10-13
+- Phase 3: 15-20 → 14-19
+- Phase 4: 21-24 → 20-23
+- Phase 5: 25-27 → 24-26
+- Phase 6: 28-30 → 27-29
+
+**Step 3: Update roadmap summary line**
 
 Change line 80 from "Thirty steps" to "Twenty-nine steps":
 
@@ -242,21 +257,19 @@ Change line 80 from "Thirty steps" to "Twenty-nine steps":
 Twenty-nine steps in six phases. Each step is self-contained; dependency order is respected within phases.
 ```
 
-**Step 3: Update the decisions table**
+**Step 4: Update the decisions table**
 
-The step numbers in the decisions table (lines 88-93) shift because etcd backups moved to step 2. All referenced steps stay the same (Flux is now 3, NFS is 5, Ingress is 6, Internal DNS is 8, Auth is still 14) — but verify the step numbers match:
+Auth architecture shifts from step 14 to step 13. All other referenced steps remain in Phase 1 and are unchanged:
 
-| Decision | Step | Current |
-|----------|------|---------|
-| Flux repo structure | 3 | Was 3, unchanged |
-| Ingress approach | 6 | Was 6, unchanged |
-| Service domain | 8 | Was 8, unchanged |
-| NFS provisioner | 5 | Was 5, unchanged |
-| Auth architecture | 14 | Was 14, unchanged |
+| Decision | Step | Change |
+|----------|------|--------|
+| Flux repo structure | 3 | Unchanged |
+| Ingress approach | 6 | Unchanged |
+| Service domain | 8 | Unchanged |
+| NFS provisioner | 5 | Unchanged |
+| Auth architecture | 13 | Was 14, shifted by -1 |
 
-No changes needed in the decisions table — the step numbers happen to remain the same because the merge and reorder cancel out within Phase 1.
-
-**Step 4: Update CLAUDE.md platform note about SecureBoot**
+**Step 5: Update CLAUDE.md platform note about SecureBoot**
 
 In `CLAUDE.md`, the platform notes say "SecureBoot currently disabled — see roadmap step 1". After this work, SecureBoot is enabled. Update to:
 
@@ -264,7 +277,7 @@ In `CLAUDE.md`, the platform notes say "SecureBoot currently disabled — see ro
 TalosOS v1.12.4 (SecureBoot + TPM-sealed LUKS2 encryption), extensions: qemu-guest-agent, nfs-utils
 ```
 
-**Step 5: Commit**
+**Step 6: Commit**
 
 ```bash
 git add README.md CLAUDE.md
@@ -289,9 +302,12 @@ Expected: Plan shows destroy + recreate of `proxmox_virtual_environment_vm.talos
 
 Verify:
 - VM resource shows `efi_disk.type = "4m"`, `efi_disk.pre_enrolled_keys = false`
-- New `tpm_state` block with `version = "v2.0"`
+- New `tpm_state` block with `datastore_id = "local-lvm"`, `version = "v2.0"`
 - ISO URL ends in `metal-amd64-secureboot.iso`
 - Installer image uses `installer-secureboot`
 - Config patches include STATE and EPHEMERAL VolumeConfig entries
+- TPM config includes `checkSecurebootStatusOnEnroll: true` in both patches
+- EPHEMERAL patch includes `lockToState: true`
+- `yamlencode()` renders `tpm` as a map (not null)
 
 Do **not** apply yet — applying destroys the running VM.

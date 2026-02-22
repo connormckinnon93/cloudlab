@@ -26,11 +26,12 @@ Add a `tpm_state` block to the VM resource:
 
 ```hcl
 tpm_state {
-  version = "v2.0"
+  datastore_id = "local-lvm"
+  version      = "v2.0"
 }
 ```
 
-The virtual TPM seals the LUKS2 encryption keys to the VM's boot chain measurements (PCR values). The disk can only be decrypted on this specific VM with this specific TPM state.
+Explicit `datastore_id` matches the `efi_disk` block's style. The virtual TPM seals the LUKS2 encryption keys to the VM's boot chain measurements (PCR values). The disk can only be decrypted on this specific VM with this specific TPM state.
 
 ### 3. SecureBoot ISO (main.tf)
 
@@ -61,7 +62,8 @@ name: STATE
 encryption:
   provider: luks2
   keys:
-    - tpm: {}
+    - tpm:
+        checkSecurebootStatusOnEnroll: true
       slot: 0
 ```
 
@@ -72,15 +74,17 @@ name: EPHEMERAL
 encryption:
   provider: luks2
   keys:
-    - tpm: {}
+    - tpm:
+        checkSecurebootStatusOnEnroll: true
       slot: 0
+      lockToState: true
 ```
 
-This uses the multi-doc `VolumeConfig` format, consistent with the existing `HostnameConfig` patch. Both STATE (machine config, etcd data) and EPHEMERAL (container storage) partitions are encrypted.
+This uses the multi-doc `VolumeConfig` format, consistent with the existing `HostnameConfig` patch. Both STATE (machine config, etcd data) and EPHEMERAL (container storage) partitions are encrypted. `checkSecurebootStatusOnEnroll` fails key enrollment if SecureBoot is not active, coupling the two security features. `lockToState` on EPHEMERAL binds its key to the STATE partition's random salt, as recommended by Talos docs for non-STATE volumes.
 
 ### 6. Roadmap reorder (README.md)
 
-Merge steps 1 and 2 into a single step. Move etcd backups to step 2 (before Flux, so the safety net exists before workloads arrive). Renumber all subsequent steps. Phase 1 becomes:
+Merge steps 1 and 2 into a single step. Move etcd backups to step 2 (before Flux, so the safety net exists before workloads arrive). Renumber all subsequent steps — Phase 1 changes and every step in Phases 2-6 shifts down by one. Phase 1 becomes:
 
 1. SecureBoot + disk encryption
 2. etcd backups
@@ -92,7 +96,7 @@ Merge steps 1 and 2 into a single step. Move etcd backups to step 2 (before Flux
 8. Internal DNS
 9. Monitoring
 
-Total steps drop from 30 to 29.
+Total steps drop from 30 to 29. The decisions table must also update: Auth architecture moves from step 14 to step 13.
 
 ## Out of Scope
 
