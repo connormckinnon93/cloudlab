@@ -75,10 +75,66 @@ Secrets are encrypted with SOPS (age backend) and stored in git. The SOPS Terraf
 | lefthook | Git pre-commit hooks |
 | Mise | Tool version management and task runner |
 
-## Future Work
+## Roadmap
 
-- **etcd backups** — Periodic snapshots via `talosctl etcd snapshot` to the Synology NAS
-- **NFS persistent volumes** — Mount Synology NAS exports for stateful workloads
-- **Disk encryption** — LUKS2 encryption on STATE and EPHEMERAL partitions via Talos VolumeConfig
-- **High availability** — Multi-node cluster with re-enabled discovery service
-- **Remote state** — Migrate from local `terraform.tfstate` to a remote backend (e.g., S3-compatible on Synology NAS) for state locking and durability
+Thirty steps in six phases. Each step is self-contained; dependency order is respected within phases.
+
+### Decisions to Make First
+
+These choices are difficult to reverse once workloads depend on them. Decide before starting the relevant step.
+
+| Decision | Step | Options |
+|----------|------|---------|
+| Flux repo structure | 3 | Monorepo (add manifests to this repo) vs separate GitOps repo |
+| Ingress approach | 6 | ingress-nginx, Cilium ingress, or Gateway API directly |
+| Service domain | 8 | `*.home.arpa`, `*.cloudlab.local`, or a real domain with split-horizon DNS |
+| NFS provisioner | 5 | democratic-csi (creates NFS shares on Synology) vs nfs-subdir-external-provisioner (subdirectories on one export) |
+| Auth architecture | 14 | Authelia (lightweight forward-auth) vs Authentik (full OIDC identity provider) |
+
+### Phase 1: Foundation
+
+1. **Fix VM SecureBoot** — Add `pre_enrolled_keys` to the `efi_disk` block; requires VM recreate
+2. **Disk encryption** — LUKS2 on STATE and EPHEMERAL partitions via Talos VolumeConfig; requires reprovision, do before workloads exist
+3. **Bootstrap Flux** — GitOps foundation; subsequent steps deploy as git commits
+4. **SOPS + Flux** — Decrypt SOPS-encrypted secrets in-cluster via Flux's kustomize-controller
+5. **NFS storage provisioner** — Dynamic PersistentVolumes backed by Synology NAS
+6. **Ingress controller** — Route external HTTP/HTTPS traffic to cluster services
+7. **cert-manager** — Automated TLS certificates via Let's Encrypt
+8. **Internal DNS** — Resolve friendly service names to the ingress IP
+9. **Monitoring** — Prometheus + Grafana for metrics, dashboards, and cluster health
+10. **etcd backups** — Periodic `talosctl etcd snapshot` to Synology NAS
+
+### Phase 2: Operational Excellence
+
+11. **Log aggregation** — Loki + Promtail for centralized container logs alongside Prometheus metrics
+12. **Alerting** — Alertmanager with notifications to Pushover, Discord, or similar
+13. **Automated dependency updates** — Renovate to open PRs when Helm charts or images update
+14. **Authentication gateway** — Single sign-on and 2FA in front of all services
+
+### Phase 3: Expand and Harden
+
+15. **Remote access** — Tailscale for secure access from outside the home network
+16. **First self-hosted app** — Validate the full platform end-to-end with a real workload
+17. **Network policies** — Cilium policies to isolate namespaces and restrict traffic
+18. **Multi-node expansion** — Add worker node(s); refactor Terraform with `for_each`
+19. **Automated cluster upgrades** — Formalize TalosOS and Kubernetes upgrade workflow
+20. **Remote Terraform state** — S3-compatible backend on Synology for state locking
+
+### Phase 4: Advanced Platform
+
+21. **Hubble observability** — Cilium's service map and flow visibility via eBPF
+22. **External-Secrets Operator** — Sync runtime secrets from 1Password into Kubernetes
+23. **PersistentVolume backups** — Volsync for scheduled PVC replication to NAS
+24. **Cluster dashboard** — Headlamp for visual cluster inspection behind auth
+
+### Phase 5: Platform Maturity
+
+25. **Gateway API migration** — Move from Ingress resources to HTTPRoute/Gateway
+26. **Image pull-through cache** — Spegel for peer-to-peer registry mirroring on-cluster
+27. **Descheduler** — Evict pods that violate scheduling constraints over time
+
+### Phase 6: Operational Confidence
+
+28. **Chaos testing** — Break things on purpose; verify alerts fire and recovery works
+29. **Resource quotas** — Per-namespace CPU/memory limits to prevent resource starvation
+30. **GitOps repo refactor** — Kustomize base/overlays structure for multi-cluster readiness
