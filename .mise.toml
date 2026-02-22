@@ -83,6 +83,11 @@ sops decrypt terraform/output/talosconfig.enc.yaml > ~/.talos/config
 sops decrypt terraform/output/kubeconfig.enc.yaml > ~/.kube/config
 """
 
+[tasks."sops:edit"]
+description = "Decrypt, edit, and re-encrypt secrets"
+usage = 'arg "[file]" help="File to edit" default="terraform/secrets.enc.json"'
+run = "sops ${usage_file?}"
+
 [tasks."talos:upgrade"]
 description = "Upgrade TalosOS to a new version"
 run = "talosctl upgrade --image factory.talos.dev/installer/{{arg(name='schematic_id')}}:{{arg(name='version')}} --preserve"
