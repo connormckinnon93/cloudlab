@@ -29,10 +29,7 @@ Create the secrets file:
 ```bash
 cat > terraform/secrets.enc.json <<'EOF'
 {
-  "proxmox_endpoint": "https://proxmox.local:8006",
-  "proxmox_api_token": "user@pam!tokenid=secret-value",
-  "talos_node_ip": "192.168.1.100",
-  "gateway": "192.168.1.1"
+  "proxmox_api_token": "user@pam!tokenid=secret-value"
 }
 EOF
 sops encrypt -i terraform/secrets.enc.json
@@ -46,11 +43,12 @@ Generate a TalosOS schematic ID at [factory.talos.dev](https://factory.talos.dev
 ## Usage
 
 ```bash
-mise run tf:init                              # Initialize Terraform
-mise run tf:plan -- -var talos_schematic_id=<id>   # Preview changes
-mise run tf:apply                             # Provision and bootstrap
-mise run tf:use-configs                       # Install kubeconfig and talosconfig
-kubectl get nodes                             # Verify
+mise run tf init                     # Initialize Terraform
+mise run tf plan                     # Preview changes
+mise run tf apply                    # Provision and bootstrap
+mise run config:export               # Encrypt outputs
+mise run config:decrypt              # Decrypt configs for local use
+kubectl get nodes                    # Verify
 ```
 
 ## Architecture

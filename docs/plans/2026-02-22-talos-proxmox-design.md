@@ -14,7 +14,7 @@ Lenovo ThinkCentre M710q (i5-7th gen, 32 GB RAM, 512 GB NVMe) running Proxmox. O
 |------|---------|---------|
 | Terraform | 1.14 | Infrastructure provisioning |
 | talosctl | 1.12 | TalosOS management CLI |
-| SOPS | 3.12 | Secrets encryption |
+| SOPS | 3.11 | Secrets encryption |
 | age | 1.3 | Encryption backend for SOPS |
 | kubectl | 1.32 | Kubernetes CLI (matches Talos 1.12's K8s) |
 | tflint | 0.61 | Terraform linter |
@@ -25,8 +25,8 @@ Lenovo ThinkCentre M710q (i5-7th gen, 32 GB RAM, 512 GB NVMe) running Proxmox. O
 
 | Provider | Constraint | Purpose |
 |----------|-----------|---------|
-| `bpg/proxmox` | `~> 0.96` | VM creation, image download |
-| `siderolabs/talos` | `~> 0.10` | Machine config, bootstrap, kubeconfig |
+| `bpg/proxmox` | `~> 0.96.0` | VM creation, image download |
+| `siderolabs/talos` | `~> 0.10.0` | Machine config, bootstrap, kubeconfig |
 | `carlpett/sops` | `~> 1.3` | Inline secret decryption |
 
 ## Project Structure
@@ -35,13 +35,14 @@ Lenovo ThinkCentre M710q (i5-7th gen, 32 GB RAM, 512 GB NVMe) running Proxmox. O
 cloudlab/
 ├── .mise.toml                    # Tool versions + task definitions
 ├── .sops.yaml                    # SOPS encryption rules
-├── .gitleaks.toml                # Custom gitleaks rules
+├── .gitleaks.toml                # Gitleaks rules (extends defaults + age key)
 ├── .gitignore
-├── lefthook.yml                  # Git hooks (fmt, validate, lint)
+├── lefthook.yml                  # Git hooks (pre-commit + commit-msg)
 ├── terraform/
 │   ├── .tflint.hcl              # tflint configuration
 │   ├── versions.tf               # Required providers
 │   ├── variables.tf              # Variable declarations
+│   ├── config.auto.tfvars        # Non-sensitive config (committed)
 │   ├── main.tf                   # SOPS secrets, Proxmox provider, VM, image
 │   ├── talos.tf                  # Talos config, bootstrap, kubeconfig
 │   ├── outputs.tf                # talosconfig, kubeconfig, vm_id
@@ -72,7 +73,7 @@ Generate the schematic ID at `factory.talos.dev` with these extensions.
 
 ## Secrets Management
 
-Only truly secret values are SOPS-encrypted. Network configuration lives in plaintext `terraform.tfvars` (gitignored). The ephemeral SOPS provider keeps the API token out of Terraform state.
+Only truly secret values are SOPS-encrypted. Network configuration lives in `config.auto.tfvars` (committed). The ephemeral SOPS provider keeps the API token out of Terraform state.
 
 **Encrypted files:**
 - `terraform/secrets.enc.json` — Proxmox API token only
@@ -80,7 +81,7 @@ Only truly secret values are SOPS-encrypted. Network configuration lives in plai
 - `terraform/output/kubeconfig.enc.yaml` — Kubernetes credentials
 
 **Plaintext configuration:**
-- `terraform/terraform.tfvars` — Proxmox endpoint, node name, SSH username, node IP, gateway (gitignored)
+- `terraform/config.auto.tfvars` — Proxmox endpoint, node name, SSH username, node IP, gateway (committed)
 
 **Age key** (`.age-key.txt`) is gitignored and never committed.
 
@@ -95,13 +96,11 @@ Only truly secret values are SOPS-encrypted. Network configuration lives in plai
 | Task | Description |
 |------|-------------|
 | `setup` | Install tools, initialize tflint, install lefthook |
-| `tf:init` | Initialize Terraform providers |
-| `tf:plan` | Preview changes |
-| `tf:apply` | Apply and encrypt outputs |
-| `tf:check` | Run fmt check, validate, and tflint |
-| `tf:destroy` | Destroy all Terraform-managed infrastructure |
-| `tf:export-configs` | Extract and encrypt talosconfig/kubeconfig |
-| `tf:use-configs` | Decrypt configs to `~/.talos` and `~/.kube` |
+| `tf` | Run any terraform subcommand (e.g., `mise run tf plan`) |
+| `check` | Run fmt check, validate, and tflint |
+| `config:export` | Extract and encrypt talosconfig/kubeconfig (hidden) |
+| `config:decrypt` | Decrypt configs for local use (scoped to project via mise env) |
+| `sops:edit` | Edit encrypted secrets |
 | `talos:upgrade` | In-place TalosOS upgrade via talosctl |
 
 ## Git Hooks (lefthook)
@@ -114,6 +113,7 @@ Pre-commit hooks run automatically:
 | `validate` | `.tf` files | `terraform validate` |
 | `lint` | `.tf` files | `tflint` |
 | `gitleaks` | All staged files | `gitleaks protect --staged` |
+| `conventional` | Commit message | Conventional commits format |
 
 Installed via `mise run setup`. Configuration in `lefthook.yml`.
 
@@ -121,10 +121,10 @@ Installed via `mise run setup`. Configuration in `lefthook.yml`.
 
 1. Generate age key, encrypt secrets, generate Talos schematic ID
 2. `mise run setup` — install tools, tflint plugins, lefthook hooks
-3. `mise run tf:init` — initialize providers
-4. `mise run tf:plan` — preview
-5. `mise run tf:apply` — create VM, bootstrap, encrypt outputs
-6. `mise run tf:use-configs` — install configs locally
+3. `mise run tf init` — initialize providers
+4. `mise run tf plan` — preview
+5. `mise run tf apply && mise run config:export` — create VM, bootstrap, encrypt outputs
+6. `mise run config:decrypt` — decrypt configs for local use
 7. `kubectl get nodes` — verify
 
 ## Day-2 Operations
@@ -132,9 +132,9 @@ Installed via `mise run setup`. Configuration in `lefthook.yml`.
 **TalosOS upgrades** use `talosctl`, not Terraform. Terraform manages initial provisioning; changing `talos_version` in Terraform would destroy and recreate the VM.
 
 ```bash
-talosctl upgrade --image factory.talos.dev/installer/<schematic_id>:<new_version> --preserve
+mise run talos:upgrade <schematic_id> <new_version>
 ```
 
-**VM resource changes** (CPU, memory, disk) can be applied via Terraform by updating variables and running `mise run tf:apply`.
+**VM resource changes** (CPU, memory, disk) can be applied via Terraform by updating variables and running `mise run tf apply`.
 
-**Recovery from partial apply:** If `terraform apply` fails mid-way (e.g., VM created but Talos bootstrap times out), re-run `mise run tf:apply` — Talos resources are idempotent. Use `mise run tf:state` to inspect what was created and `mise run tf:plan` to see the remaining delta.
+**Recovery from partial apply:** If `terraform apply` fails mid-way (e.g., VM created but Talos bootstrap times out), re-run `mise run tf apply` — Talos resources are idempotent. Use `mise run tf state list` to inspect what was created and `mise run tf plan` to see the remaining delta.
