@@ -40,11 +40,11 @@ variable "cluster_name" {
 variable "talos_version" {
   description = "TalosOS version to deploy"
   type        = string
-  default     = "v1.12.0"
+  default     = "v1.12.4"
 }
 
 variable "talos_schematic_id" {
-  description = "Schematic ID from factory.talos.dev (includes qemu-guest-agent and nfs-mount extensions)"
+  description = "Schematic ID from factory.talos.dev (includes qemu-guest-agent and nfs-utils extensions)"
   type        = string
 }
 
