@@ -48,6 +48,12 @@ variable "talos_schematic_id" {
   type        = string
 }
 
+variable "vm_mac_address" {
+  description = "Fixed MAC address for the TalosOS VM (for DHCP reservation)"
+  type        = string
+  default     = "BC:24:11:CA:FE:01"
+}
+
 variable "vm_cpu_cores" {
   description = "Number of CPU cores for the VM"
   type        = number

@@ -1,5 +1,16 @@
 provider "talos" {}
 
+# --- VM IP (for initial connection before static IP is configured) ---
+
+locals {
+  # Find the first non-loopback IPv4 address reported by the QEMU guest agent.
+  # The interface index varies by OS; flatten and filter to avoid hardcoding it.
+  vm_ip = [
+    for addr in flatten(proxmox_virtual_environment_vm.talos.ipv4_addresses) :
+    addr if addr != "127.0.0.1"
+  ][0]
+}
+
 # --- Machine Secrets ---
 
 resource "talos_machine_secrets" "this" {
@@ -30,7 +41,7 @@ data "talos_client_configuration" "this" {
 resource "talos_machine_configuration_apply" "controlplane" {
   client_configuration        = talos_machine_secrets.this.client_configuration
   machine_configuration_input = data.talos_machine_configuration.controlplane.machine_configuration
-  node                        = var.talos_node_ip
+  node                        = local.vm_ip
 
   config_patches = [
     yamlencode({
@@ -67,8 +78,6 @@ resource "talos_machine_configuration_apply" "controlplane" {
       }
     }),
   ]
-
-  depends_on = [proxmox_virtual_environment_vm.talos]
 }
 
 # --- Bootstrap ---

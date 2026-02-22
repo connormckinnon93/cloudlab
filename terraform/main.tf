@@ -39,6 +39,7 @@ resource "proxmox_virtual_environment_vm" "talos" {
   bios    = "ovmf"
   machine = "q35"
 
+  scsi_hardware   = "virtio-scsi-single"
   stop_on_destroy = true
 
   agent {
@@ -73,8 +74,9 @@ resource "proxmox_virtual_environment_vm" "talos" {
   }
 
   network_device {
-    bridge = "vmbr0"
-    model  = "virtio"
+    bridge      = "vmbr0"
+    model       = "virtio"
+    mac_address = var.vm_mac_address
   }
 
   operating_system {
