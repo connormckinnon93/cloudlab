@@ -67,6 +67,7 @@ resource "talos_machine_configuration_apply" "controlplane" {
     yamlencode({
       machine = {
         kubelet = {
+          defaultRuntimeSeccompProfileEnabled = true
           extraArgs = {
             node-ip = var.talos_node_ip
           }
@@ -74,6 +75,9 @@ resource "talos_machine_configuration_apply" "controlplane" {
       }
       cluster = {
         allowSchedulingOnControlPlanes = true
+        discovery = {
+          enabled = false
+        }
       }
     }),
     yamlencode({

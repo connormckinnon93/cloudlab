@@ -11,3 +11,8 @@ pre-commit:
       run: tflint --chdir=terraform
     gitleaks:
       run: gitleaks protect --staged
+
+commit-msg:
+  commands:
+    conventional:
+      run: 'grep -qE "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .+" {1}'

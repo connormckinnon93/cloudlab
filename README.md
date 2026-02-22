@@ -76,3 +76,10 @@ Secrets are encrypted with SOPS (age backend) and stored in git. The SOPS Terraf
 | tflint | Terraform linting |
 | lefthook | Git pre-commit hooks |
 | Mise | Tool version management and task runner |
+
+## Future Work
+
+- **etcd backups** — Periodic snapshots via `talosctl etcd snapshot` to the Synology NAS
+- **NFS persistent volumes** — Mount Synology NAS exports for stateful workloads
+- **Disk encryption** — LUKS2 encryption on STATE and EPHEMERAL partitions via Talos VolumeConfig
+- **High availability** — Multi-node cluster with re-enabled discovery service

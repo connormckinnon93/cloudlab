@@ -4,11 +4,12 @@
 # Terraform
 terraform/.terraform/
 terraform/terraform.tfstate
-terraform/*.tfvars
+terraform/terraform.tfvars
 terraform/*.tfvars.json
+!terraform/config.auto.tfvars
 terraform/*.tfplan
 terraform/terraform.tfstate.backup
-terraform/crash.log
+terraform/crash*.log
 terraform/override.tf
 terraform/override.tf.json
 terraform/*_override.tf

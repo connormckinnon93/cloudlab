@@ -1,0 +1,6 @@
+proxmox_endpoint     = "https://thinkcentre.home:8006"
+proxmox_ssh_username = "terraform"
+proxmox_node_name    = "thinkcentre"
+talos_node_ip        = "192.168.20.100"
+gateway              = "192.168.20.1"
+talos_schematic_id   = "3abf06e1d81e509d779dc256f9feae6cd6d82c69337c661cbfc383a92594faf5"

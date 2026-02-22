@@ -33,8 +33,10 @@ resource "proxmox_virtual_environment_download_file" "talos_image" {
 # --- VM ---
 
 resource "proxmox_virtual_environment_vm" "talos" {
-  name      = var.vm_name
-  node_name = var.proxmox_node_name
+  name        = var.vm_name
+  description = "TalosOS control plane — managed by Terraform"
+  tags        = ["terraform", "talos", "kubernetes"]
+  node_name   = var.proxmox_node_name
 
   bios    = "ovmf"
   machine = "q35"

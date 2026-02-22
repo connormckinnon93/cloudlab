@@ -10,6 +10,8 @@ gitleaks = "8.30"
 
 [env]
 SOPS_AGE_KEY_FILE = "{{config_root}}/.age-key.txt"
+TALOSCONFIG = "{{config_root}}/terraform/output/talosconfig.yaml"
+KUBECONFIG = "{{config_root}}/terraform/output/kubeconfig.yaml"
 
 [tasks.setup]
 description = "Install tools, initialize tflint, install lefthook"
@@ -18,6 +20,11 @@ mise install
 cd terraform && tflint --init && terraform init
 lefthook install
 """
+
+[tasks."tf:fmt"]
+description = "Format Terraform files"
+dir = "terraform"
+run = "terraform fmt"
 
 [tasks."tf:init"]
 description = "Initialize Terraform providers"
@@ -43,6 +50,7 @@ mise run tf:export-configs
 description = "Run fmt check, validate, and tflint"
 dir = "terraform"
 run = """
+set -e
 terraform fmt -check
 terraform validate
 tflint
@@ -78,11 +86,10 @@ sops encrypt -i output/kubeconfig.enc.yaml
 """
 
 [tasks."tf:use-configs"]
-description = "Decrypt configs to ~/.talos and ~/.kube"
+description = "Decrypt configs for local use (scoped to project via mise env)"
 run = """
-mkdir -p ~/.talos ~/.kube
-sops decrypt terraform/output/talosconfig.enc.yaml > ~/.talos/config
-sops decrypt terraform/output/kubeconfig.enc.yaml > ~/.kube/config
+(umask 077 && sops decrypt terraform/output/talosconfig.enc.yaml > terraform/output/talosconfig.yaml)
+(umask 077 && sops decrypt terraform/output/kubeconfig.enc.yaml > terraform/output/kubeconfig.yaml)
 """
 
 [tasks."sops:edit"]
@@ -92,4 +99,8 @@ run = "sops ${usage_file?}"
 
 [tasks."talos:upgrade"]
 description = "Upgrade TalosOS to a new version"
-run = "talosctl upgrade --image factory.talos.dev/installer/{{arg(name='schematic_id')}}:{{arg(name='version')}} --preserve"
+usage = """
+arg "<schematic_id>" help="Schematic ID from factory.talos.dev"
+arg "<version>" help="TalosOS version to upgrade to"
+"""
+run = "talosctl upgrade --image factory.talos.dev/installer/${usage_schematic_id?}:${usage_version?} --preserve"
