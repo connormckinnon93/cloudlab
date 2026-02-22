@@ -41,6 +41,7 @@ resource "proxmox_virtual_environment_vm" "talos" {
   bios    = "ovmf"
   machine = "q35"
 
+  boot_order      = ["scsi0"]
   scsi_hardware   = "virtio-scsi-single"
   stop_on_destroy = true
 
