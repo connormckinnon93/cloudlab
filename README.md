@@ -146,3 +146,4 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 28. **Chaos testing** — Break things on purpose; verify alerts fire and recovery works
 29. **Resource quotas** — Per-namespace CPU/memory limits to prevent resource starvation
 30. **GitOps repo refactor** — Kustomize base/overlays structure for multi-cluster readiness
+
