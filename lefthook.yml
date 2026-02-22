@@ -14,8 +14,16 @@ pre-commit:
       root: "terraform/"
       glob: "*.tf"
       run: tflint
+    kustomize:
+      glob: "kubernetes/**/*.yaml"
+      run: |
+        for dir in kubernetes/*/; do
+          if [ -f "${dir}kustomization.yaml" ]; then
+            kustomize build "$dir" > /dev/null
+          fi
+        done
     gitleaks:
-      run: gitleaks protect --staged
+      run: gitleaks git --pre-commit --staged
 
 commit-msg:
   commands:
