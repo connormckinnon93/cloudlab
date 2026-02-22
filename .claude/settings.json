@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(mise run tf:*)",
-      "Bash(mise run setup)"
+      "Bash(mise run setup)",
+      "Bash(git add:*)"
     ]
   }
 }

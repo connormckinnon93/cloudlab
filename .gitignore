@@ -14,6 +14,9 @@ terraform/override.tf.json
 terraform/*_override.tf
 terraform/*_override.tf.json
 
+# Claude Code local settings
+.claude/settings.local.json
+
 # Decrypted output (encrypted versions are tracked)
 terraform/output/talosconfig.yaml
 terraform/output/kubeconfig.yaml
