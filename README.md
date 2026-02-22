@@ -93,7 +93,7 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 
 ### Phase 1: Foundation
 
-1. **SecureBoot + disk encryption** — EFI SecureBoot, virtual TPM, LUKS2 on STATE and EPHEMERAL partitions
+1. ~~**SecureBoot + disk encryption** — EFI SecureBoot, virtual TPM, LUKS2 on STATE and EPHEMERAL partitions~~
 2. **etcd backups** — Periodic `talosctl etcd snapshot` to Synology NAS
 3. **Bootstrap Flux** — GitOps foundation; subsequent steps deploy as git commits
 4. **SOPS + Flux** — Decrypt SOPS-encrypted secrets in-cluster via Flux's kustomize-controller
