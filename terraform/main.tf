@@ -26,8 +26,8 @@ resource "proxmox_virtual_environment_download_file" "talos_image" {
   content_type = "iso"
   datastore_id = "local"
   node_name    = var.proxmox_node_name
-  url          = "https://factory.talos.dev/image/${var.talos_schematic_id}/${var.talos_version}/metal-amd64.iso"
-  file_name    = "talos-${var.talos_version}-metal-amd64.iso"
+  url          = "https://factory.talos.dev/image/${var.talos_schematic_id}/${var.talos_version}/metal-amd64-secureboot.iso"
+  file_name    = "talos-${var.talos_version}-metal-amd64-secureboot.iso"
 }
 
 # --- VM ---
