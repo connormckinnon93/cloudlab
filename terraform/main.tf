@@ -81,10 +81,6 @@ resource "proxmox_virtual_environment_vm" "talos" {
     type = "l26"
   }
 
-  boot {
-    order = ["scsi0", "ide2"]
-  }
-
   lifecycle {
     ignore_changes = [cdrom]
   }

@@ -82,7 +82,7 @@ resource "talos_machine_bootstrap" "this" {
 
 # --- Kubeconfig ---
 
-data "talos_cluster_kubeconfig" "this" {
+resource "talos_cluster_kubeconfig" "this" {
   node                 = var.talos_node_ip
   client_configuration = talos_machine_secrets.this.client_configuration
 
