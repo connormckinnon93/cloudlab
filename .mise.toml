@@ -27,13 +27,15 @@ run = "terraform init"
 [tasks."tf:plan"]
 description = "Preview Terraform changes"
 dir = "terraform"
-run = "terraform plan {{arg(name=\"extra\", var=true)}}"
+usage = 'arg "[extra]" var=#true help="Extra arguments to pass to terraform plan"'
+run = "terraform plan ${usage_extra:-}"
 
 [tasks."tf:apply"]
 description = "Apply Terraform and encrypt outputs"
 dir = "terraform"
+usage = 'arg "[extra]" var=#true help="Extra arguments to pass to terraform apply"'
 run = """
-terraform apply {{arg(name="extra", var=true)}}
+terraform apply ${usage_extra:-}
 mise run tf:export-configs
 """
 
@@ -49,12 +51,14 @@ tflint
 [tasks."tf:destroy"]
 description = "Destroy all Terraform-managed infrastructure"
 dir = "terraform"
-run = "terraform destroy {{arg(name=\"extra\", var=true)}}"
+usage = 'arg "[extra]" var=#true help="Extra arguments to pass to terraform destroy"'
+run = "terraform destroy ${usage_extra:-}"
 
 [tasks."tf:output"]
 description = "Show Terraform outputs"
 dir = "terraform"
-run = "terraform output {{arg(name=\"extra\", var=true)}}"
+usage = 'arg "[extra]" var=#true help="Extra arguments to pass to terraform output"'
+run = "terraform output ${usage_extra:-}"
 
 [tasks."tf:state"]
 description = "List Terraform state resources"
