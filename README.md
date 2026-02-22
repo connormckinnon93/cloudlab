@@ -77,7 +77,7 @@ Secrets are encrypted with SOPS (age backend) and stored in git. The SOPS Terraf
 
 ## Roadmap
 
-Thirty steps in six phases. Each step is self-contained; dependency order is respected within phases.
+Twenty-nine steps in six phases. Each step is self-contained; dependency order is respected within phases.
 
 ### Decisions to Make First
 
@@ -89,12 +89,12 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 | Ingress approach | 6 | ingress-nginx, Cilium ingress, or Gateway API directly |
 | Service domain | 8 | `*.home.arpa`, `*.cloudlab.local`, or a real domain with split-horizon DNS |
 | NFS provisioner | 5 | democratic-csi (creates NFS shares on Synology) vs nfs-subdir-external-provisioner (subdirectories on one export) |
-| Auth architecture | 14 | Authelia (lightweight forward-auth) vs Authentik (full OIDC identity provider) |
+| Auth architecture | 13 | Authelia (lightweight forward-auth) vs Authentik (full OIDC identity provider) |
 
 ### Phase 1: Foundation
 
-1. **Fix VM SecureBoot** — Add `pre_enrolled_keys` to the `efi_disk` block; requires VM recreate
-2. **Disk encryption** — LUKS2 on STATE and EPHEMERAL partitions via Talos VolumeConfig; requires reprovision, do before workloads exist
+1. **SecureBoot + disk encryption** — EFI SecureBoot, virtual TPM, LUKS2 on STATE and EPHEMERAL partitions
+2. **etcd backups** — Periodic `talosctl etcd snapshot` to Synology NAS
 3. **Bootstrap Flux** — GitOps foundation; subsequent steps deploy as git commits
 4. **SOPS + Flux** — Decrypt SOPS-encrypted secrets in-cluster via Flux's kustomize-controller
 5. **NFS storage provisioner** — Dynamic PersistentVolumes backed by Synology NAS
@@ -102,39 +102,38 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 7. **cert-manager** — Automated TLS certificates via Let's Encrypt
 8. **Internal DNS** — Resolve friendly service names to the ingress IP
 9. **Monitoring** — Prometheus + Grafana for metrics, dashboards, and cluster health
-10. **etcd backups** — Periodic `talosctl etcd snapshot` to Synology NAS
 
 ### Phase 2: Operational Excellence
 
-11. **Log aggregation** — Loki + Promtail for centralized container logs alongside Prometheus metrics
-12. **Alerting** — Alertmanager with notifications to Pushover, Discord, or similar
-13. **Automated dependency updates** — Renovate to open PRs when Helm charts or images update
-14. **Authentication gateway** — Single sign-on and 2FA in front of all services
+10. **Log aggregation** — Loki + Promtail for centralized container logs alongside Prometheus metrics
+11. **Alerting** — Alertmanager with notifications to Pushover, Discord, or similar
+12. **Automated dependency updates** — Renovate to open PRs when Helm charts or images update
+13. **Authentication gateway** — Single sign-on and 2FA in front of all services
 
 ### Phase 3: Expand and Harden
 
-15. **Remote access** — Tailscale for secure access from outside the home network
-16. **First self-hosted app** — Validate the full platform end-to-end with a real workload
-17. **Network policies** — Cilium policies to isolate namespaces and restrict traffic
-18. **Multi-node expansion** — Add worker node(s); refactor Terraform with `for_each`
-19. **Automated cluster upgrades** — Formalize TalosOS and Kubernetes upgrade workflow
-20. **Remote Terraform state** — S3-compatible backend on Synology for state locking
+14. **Remote access** — Tailscale for secure access from outside the home network
+15. **First self-hosted app** — Validate the full platform end-to-end with a real workload
+16. **Network policies** — Cilium policies to isolate namespaces and restrict traffic
+17. **Multi-node expansion** — Add worker node(s); refactor Terraform with `for_each`
+18. **Automated cluster upgrades** — Formalize TalosOS and Kubernetes upgrade workflow
+19. **Remote Terraform state** — S3-compatible backend on Synology for state locking
 
 ### Phase 4: Advanced Platform
 
-21. **Hubble observability** — Cilium's service map and flow visibility via eBPF
-22. **External-Secrets Operator** — Sync runtime secrets from 1Password into Kubernetes
-23. **PersistentVolume backups** — Volsync for scheduled PVC replication to NAS
-24. **Cluster dashboard** — Headlamp for visual cluster inspection behind auth
+20. **Hubble observability** — Cilium's service map and flow visibility via eBPF
+21. **External-Secrets Operator** — Sync runtime secrets from 1Password into Kubernetes
+22. **PersistentVolume backups** — Volsync for scheduled PVC replication to NAS
+23. **Cluster dashboard** — Headlamp for visual cluster inspection behind auth
 
 ### Phase 5: Platform Maturity
 
-25. **Gateway API migration** — Move from Ingress resources to HTTPRoute/Gateway
-26. **Image pull-through cache** — Spegel for peer-to-peer registry mirroring on-cluster
-27. **Descheduler** — Evict pods that violate scheduling constraints over time
+24. **Gateway API migration** — Move from Ingress resources to HTTPRoute/Gateway
+25. **Image pull-through cache** — Spegel for peer-to-peer registry mirroring on-cluster
+26. **Descheduler** — Evict pods that violate scheduling constraints over time
 
 ### Phase 6: Operational Confidence
 
-28. **Chaos testing** — Break things on purpose; verify alerts fire and recovery works
-29. **Resource quotas** — Per-namespace CPU/memory limits to prevent resource starvation
-30. **GitOps repo refactor** — Kustomize base/overlays structure for multi-cluster readiness
+27. **Chaos testing** — Break things on purpose; verify alerts fire and recovery works
+28. **Resource quotas** — Per-namespace CPU/memory limits to prevent resource starvation
+29. **GitOps repo refactor** — Kustomize base/overlays structure for multi-cluster readiness
