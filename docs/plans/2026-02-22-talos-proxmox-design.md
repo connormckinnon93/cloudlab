@@ -6,7 +6,7 @@ Provision a single TalosOS VM on a Proxmox node, bootstrap a single-node Kuberne
 
 ## Host
 
-Lenovo ThinkCentre M710q (i5-7th gen, 32 GB RAM, 512 GB NVMe) running Proxmox.
+Lenovo ThinkCentre M710q (i5-7th gen, 32 GB RAM, 512 GB NVMe) running Proxmox. Operator workstation must have full-disk encryption (FileVault) enabled — Terraform state contains secrets in plaintext.
 
 ## Tools
 
@@ -35,6 +35,7 @@ Lenovo ThinkCentre M710q (i5-7th gen, 32 GB RAM, 512 GB NVMe) running Proxmox.
 cloudlab/
 ├── .mise.toml                    # Tool versions + task definitions
 ├── .sops.yaml                    # SOPS encryption rules
+├── .gitleaks.toml                # Custom gitleaks rules
 ├── .gitignore
 ├── lefthook.yml                  # Git hooks (fmt, validate, lint)
 ├── terraform/
@@ -63,20 +64,31 @@ Generate the schematic ID at `factory.talos.dev` with these extensions.
 
 | Resource | Value | Reasoning |
 |----------|-------|-----------|
-| CPU | 4 cores | Half of 8 threads; leaves headroom for Proxmox |
+| BIOS | OVMF (UEFI) | Required by TalosOS |
+| Machine | q35 | Recommended by TalosOS Proxmox docs |
+| CPU | 4 cores, host type | Half of 8 threads; host type for best performance |
 | Memory | 16 GB | Half of 32 GB; plenty for K8s + services |
 | Disk | 100 GB | ~20% of NVMe; room for images and PVs |
 
 ## Secrets Management
 
-SOPS encrypts secrets with age keys. The Terraform SOPS provider decrypts inline — no pre-decrypt step needed.
+Only truly secret values are SOPS-encrypted. Network configuration lives in plaintext `terraform.tfvars` (gitignored). The ephemeral SOPS provider keeps the API token out of Terraform state.
 
 **Encrypted files:**
-- `terraform/secrets.enc.json` — Proxmox API credentials, node IP, gateway
+- `terraform/secrets.enc.json` — Proxmox API token only
 - `terraform/output/talosconfig.enc.yaml` — Talos client config
 - `terraform/output/kubeconfig.enc.yaml` — Kubernetes credentials
 
+**Plaintext configuration:**
+- `terraform/terraform.tfvars` — Proxmox endpoint, node name, SSH username, node IP, gateway (gitignored)
+
 **Age key** (`.age-key.txt`) is gitignored and never committed.
+
+**Age key lifecycle:**
+- **Generate:** `age-keygen -o .age-key.txt`, copy public key to `.sops.yaml`
+- **Backup:** Store the private key in 1Password
+- **Rotate:** Generate a new key, update `.sops.yaml`, run `sops updatekeys` on all encrypted files
+- **Recover:** Restore `.age-key.txt` from 1Password backup
 
 ## Mise Tasks
 
@@ -87,8 +99,10 @@ SOPS encrypts secrets with age keys. The Terraform SOPS provider decrypts inline
 | `tf:plan` | Preview changes |
 | `tf:apply` | Apply and encrypt outputs |
 | `tf:check` | Run fmt check, validate, and tflint |
+| `tf:destroy` | Destroy all Terraform-managed infrastructure |
 | `tf:export-configs` | Extract and encrypt talosconfig/kubeconfig |
 | `tf:use-configs` | Decrypt configs to `~/.talos` and `~/.kube` |
+| `talos:upgrade` | In-place TalosOS upgrade via talosctl |
 
 ## Git Hooks (lefthook)
 
@@ -112,3 +126,15 @@ Installed via `mise run setup`. Configuration in `lefthook.yml`.
 5. `mise run tf:apply` — create VM, bootstrap, encrypt outputs
 6. `mise run tf:use-configs` — install configs locally
 7. `kubectl get nodes` — verify
+
+## Day-2 Operations
+
+**TalosOS upgrades** use `talosctl`, not Terraform. Terraform manages initial provisioning; changing `talos_version` in Terraform would destroy and recreate the VM.
+
+```bash
+talosctl upgrade --image factory.talos.dev/installer/<schematic_id>:<new_version> --preserve
+```
+
+**VM resource changes** (CPU, memory, disk) can be applied via Terraform by updating variables and running `mise run tf:apply`.
+
+**Recovery from partial apply:** If `terraform apply` fails mid-way (e.g., VM created but Talos bootstrap times out), re-run `mise run tf:apply` — Talos resources are idempotent. Use `mise run tf:state` to inspect what was created and `mise run tf:plan` to see the remaining delta.

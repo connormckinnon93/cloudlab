@@ -25,8 +25,11 @@ mise run tf:use-configs   # Decrypt configs to ~/.talos and ~/.kube
 |------|---------|
 | `.mise.toml` | Tool versions (terraform, talosctl, sops, age, kubectl, tflint, lefthook) and tasks |
 | `.sops.yaml` | SOPS encryption rules — age key, file patterns |
+| `terraform/versions.tf` | Required providers and version constraints |
+| `terraform/variables.tf` | Variable declarations for VM and cluster config |
 | `terraform/main.tf` | Proxmox provider, VM resource, TalosOS image download |
 | `terraform/talos.tf` | Talos machine config, bootstrap, kubeconfig retrieval |
+| `terraform/outputs.tf` | Terraform outputs (vm_id, talosconfig, kubeconfig) |
 | `terraform/secrets.enc.json` | SOPS-encrypted Proxmox credentials and network config |
 | `terraform/.tflint.hcl` | tflint linter configuration |
 | `lefthook.yml` | Git pre-commit hooks (fmt, validate, lint) |
@@ -50,7 +53,7 @@ mise run tf:use-configs   # Decrypt configs to ~/.talos and ~/.kube
 ## Conventions
 
 - Pin tool versions in `.mise.toml`, not system-wide
-- All sensitive values go in `secrets.enc.json`, never in `variables.tf` defaults
+- Only truly secret values (API tokens) go in `secrets.enc.json`; network config goes in `terraform.tfvars` (gitignored)
 - Terraform state is local and gitignored — this is a single-operator homelab
 - Use `mise run tf:*` tasks, not raw `terraform` commands
 
@@ -61,7 +64,7 @@ mise run tf:check         # fmt check + validate + tflint (also runs as pre-comm
 mise run tf:plan          # Verify changes before applying
 ```
 
-Lefthook runs `tf:check` automatically on pre-commit for `.tf` file changes.
+Lefthook runs `tf:check` automatically on pre-commit for `.tf` file changes. Gitleaks scans all staged files for secrets (API keys, tokens, age private keys).
 
 ## Platform Notes
 
