@@ -63,6 +63,12 @@ A single TalosOS VM runs on Proxmox as both the Kubernetes control plane and wor
 
 Secrets are encrypted with SOPS (age backend) and stored in git. The SOPS Terraform provider decrypts them inline during plan/apply — no manual decrypt step required.
 
+## Operations
+
+**Re-bootstrap Flux after cluster rebuild:** `flux bootstrap github` is idempotent. If the cluster is reprovisioned (`mise run tf apply`), re-run the bootstrap command to reinstall Flux controllers. The existing deploy key and repo configuration are reused.
+
+**Rotate the Flux deploy key:** The SSH deploy key registered during bootstrap has no expiry. To rotate it, delete the existing deploy key in GitHub repo settings, then re-run `flux bootstrap github` with a new fine-grained PAT.
+
 ## Tools
 
 | Tool | Purpose |
@@ -96,7 +102,7 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 ### Phase 1: Foundation
 
 1. ~~**SecureBoot + disk encryption** — EFI SecureBoot, virtual TPM, LUKS2 on STATE and EPHEMERAL partitions~~
-2. **Bootstrap Flux** — GitHub repo, CI, GitOps foundation
+2. ~~**Bootstrap Flux** — GitHub repo, CI, GitOps foundation~~
 3. **SOPS + Flux** — Decrypt SOPS-encrypted secrets in-cluster via Flux's kustomize-controller
 4. **NFS storage provisioner** — Dynamic PersistentVolumes backed by Synology NAS
 5. **Ingress controller** — Route external HTTP/HTTPS traffic to cluster services

@@ -11,7 +11,7 @@ mise run tf plan          # Preview changes
 mise run tf apply         # Apply changes
 mise run config:export    # Encrypt talosconfig and kubeconfig
 mise run config:decrypt   # Decrypt configs for local use
-mise run check            # Run fmt check, validate, lint
+mise run check            # Run all validators: tf fmt, validate, lint, kustomize, kubeconform, gitleaks
 mise run sops:edit        # Edit encrypted secrets (defaults to secrets.enc.json)
 ```
 
@@ -20,6 +20,8 @@ mise run sops:edit        # Edit encrypted secrets (defaults to secrets.enc.json
 - **`terraform/`** — All Terraform configuration
 - **`terraform/output/`** — SOPS-encrypted talosconfig and kubeconfig
 - **`docs/plans/`** — Design documents
+- **`kubernetes/`** — Flux GitOps manifests (Kustomization hierarchy)
+- **`.github/workflows/`** — GitHub Actions CI
 
 ## Key Files
 
@@ -36,6 +38,12 @@ mise run sops:edit        # Edit encrypted secrets (defaults to secrets.enc.json
 | `terraform/secrets.enc.json` | SOPS-encrypted Proxmox API token |
 | `terraform/.tflint.hcl` | tflint linter configuration |
 | `lefthook.yml` | Git hooks (pre-commit: fmt, validate, lint; commit-msg: conventional commits) |
+| `.github/workflows/check.yml` | GitHub Actions CI — runs `mise run check` on PRs |
+| `kubernetes/flux-system/` | Auto-generated Flux controllers and sync config |
+| `kubernetes/flux-system/infrastructure.yaml` | Flux Kustomization CRD — reconciles `kubernetes/infrastructure/` |
+| `kubernetes/flux-system/apps.yaml` | Flux Kustomization CRD — reconciles `kubernetes/apps/` |
+| `kubernetes/infrastructure/kustomization.yaml` | Kustomize entry point for cluster services (empty until step 3+) |
+| `kubernetes/apps/kustomization.yaml` | Kustomize entry point for workloads (empty until step 14+) |
 
 ## Providers
 
@@ -64,11 +72,13 @@ mise run sops:edit        # Edit encrypted secrets (defaults to secrets.enc.json
 ## Validation
 
 ```bash
-mise run check            # fmt check + validate + tflint (also runs as pre-commit hook)
-mise run tf plan          # Verify changes before applying
+mise run check            # Full suite: tf fmt, validate, lint, kustomize, kubeconform, gitleaks
+mise run tf plan          # Verify Terraform changes before applying
+flux check                # Verify Flux controllers are healthy
+flux reconcile kustomization flux-system --with-source  # Force reconciliation
 ```
 
-Lefthook runs fmt-check, validate, lint, and gitleaks on pre-commit for `.tf` file changes. A commit-msg hook enforces conventional commit format.
+Three validation contexts: lefthook runs a fast subset on pre-commit (terraform fmt, kustomize build, gitleaks). `mise run check` runs the full suite on demand. GitHub Actions runs `mise run check` on every PR and gates merge.
 
 ## Platform Notes
 
@@ -83,3 +93,5 @@ Lefthook runs fmt-check, validate, lint, and gitleaks on pre-commit for `.tf` fi
 - **VM IP bootstrapping**: `talos_machine_configuration_apply` connects to the VM's DHCP address (via QEMU guest agent `ipv4_addresses`), not the static IP being configured. Post-reboot resources (bootstrap, kubeconfig) use the static IP.
 - **SOPS creation rules**: Files must match `\.enc\.(json|yaml)$` pattern. The `config:export` task writes directly to `.enc.yaml` filenames and uses `sops encrypt -i` (in-place)
 - **Mise task args**: Use `usage` field with `var=#true` for optional arguments (not `arg()` template function)
+- **Flux Kustomization hierarchy**: Flux CRDs (`infrastructure.yaml`, `apps.yaml`) live in `kubernetes/flux-system/` and are listed in its Kustomize `kustomization.yaml`. Target directories (`infrastructure/`, `apps/`) have their own Kustomize `kustomization.yaml` with resource lists. This avoids the naming conflict between Flux Kustomization CRDs and Kustomize's `kustomization.yaml`.
+- **`mise run check` scope**: The `check` task runs from the project root (not `dir = "terraform"`). Terraform commands run in a subshell. Kubernetes validation is guarded by `[ -d kubernetes ]` and skips if the directory doesn't exist.
