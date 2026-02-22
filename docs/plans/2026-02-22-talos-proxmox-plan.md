@@ -6,7 +6,7 @@
 
 **Architecture:** Terraform creates a Proxmox VM from a TalosOS image downloaded via factory.talos.dev, then uses the Talos provider to generate machine configs, apply them, bootstrap etcd, and retrieve kubeconfig. SOPS with age encrypts all secrets at rest. Mise manages tool versions and task orchestration.
 
-**Tech Stack:** Terraform 1.14, bpg/proxmox provider ~> 0.96, siderolabs/talos provider ~> 0.10, carlpett/sops provider ~> 1.3, SOPS 3.12, age 1.3, tflint 0.61, lefthook 2.1, gitleaks 8.30
+**Tech Stack:** Terraform 1.14, bpg/proxmox provider ~> 0.96, siderolabs/talos provider ~> 0.10, carlpett/sops provider ~> 1.3, SOPS 3.11, age 1.3, tflint 0.61, lefthook 2.1, gitleaks 8.30
 
 ---
 
@@ -47,6 +47,9 @@ terraform/override.tf
 terraform/override.tf.json
 terraform/*_override.tf
 terraform/*_override.tf.json
+
+# Claude Code local settings
+.claude/settings.local.json
 
 # Decrypted output (encrypted versions are tracked)
 terraform/output/talosconfig.yaml
@@ -106,7 +109,7 @@ git commit -m "chore: add SOPS encryption rules for age backend"
 [tools]
 terraform = "1.14"
 talosctl = "1.12"
-sops = "3.12"
+sops = "3.11"
 age = "1.3"
 kubectl = "1.32"
 tflint = "0.61"
@@ -187,6 +190,11 @@ mkdir -p ~/.talos ~/.kube
 sops decrypt terraform/output/talosconfig.enc.yaml > ~/.talos/config
 sops decrypt terraform/output/kubeconfig.enc.yaml > ~/.kube/config
 """
+
+[tasks."sops:edit"]
+description = "Decrypt, edit, and re-encrypt secrets"
+usage = 'arg "[file]" help="File to edit" default="terraform/secrets.enc.json"'
+run = "sops ${usage_file?}"
 
 [tasks."talos:upgrade"]
 description = "Upgrade TalosOS to a new version"
@@ -323,11 +331,11 @@ variable "cluster_name" {
 variable "talos_version" {
   description = "TalosOS version to deploy"
   type        = string
-  default     = "v1.12.0"
+  default     = "v1.12.4"
 }
 
 variable "talos_schematic_id" {
-  description = "Schematic ID from factory.talos.dev (includes qemu-guest-agent and nfs-mount extensions)"
+  description = "Schematic ID from factory.talos.dev (includes qemu-guest-agent and nfs-utils extensions)"
   type        = string
 }
 
@@ -473,10 +481,6 @@ resource "proxmox_virtual_environment_vm" "talos" {
     type = "l26"
   }
 
-  boot {
-    order = ["scsi0", "ide2"]
-  }
-
   lifecycle {
     ignore_changes = [cdrom]
   }
@@ -584,7 +588,7 @@ resource "talos_machine_bootstrap" "this" {
 
 # --- Kubeconfig ---
 
-data "talos_cluster_kubeconfig" "this" {
+resource "talos_cluster_kubeconfig" "this" {
   node                 = var.talos_node_ip
   client_configuration = talos_machine_secrets.this.client_configuration
 
@@ -622,7 +626,7 @@ output "talosconfig" {
 
 output "kubeconfig" {
   description = "Kubernetes kubeconfig"
-  value       = data.talos_cluster_kubeconfig.this.kubeconfig_raw
+  value       = talos_cluster_kubeconfig.this.kubeconfig_raw
   sensitive   = true
 }
 ```
@@ -682,10 +686,11 @@ This step requires the user to visit factory.talos.dev.
 **Step 1: Generate schematic**
 
 1. Go to [factory.talos.dev](https://factory.talos.dev)
-2. Select TalosOS version `v1.12.0`
-3. Add extensions: `siderolabs/qemu-guest-agent`, `siderolabs/nfs-mount`
-4. Copy the schematic ID
-5. Set `talos_schematic_id` in `terraform/terraform.tfvars`
+2. Select TalosOS version `v1.12.4`
+3. Enable Secure Boot
+4. Add extensions: `siderolabs/qemu-guest-agent`, `siderolabs/nfs-utils`
+5. Copy the schematic ID
+6. Set `talos_schematic_id` in `terraform/terraform.tfvars`
 
 ---
 
