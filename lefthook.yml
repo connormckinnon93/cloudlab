@@ -1,0 +1,13 @@
+pre-commit:
+  commands:
+    fmt-check:
+      glob: "terraform/*.tf"
+      run: cd terraform && terraform fmt -check
+    validate:
+      glob: "terraform/*.tf"
+      run: cd terraform && terraform validate
+    lint:
+      glob: "terraform/*.tf"
+      run: tflint --chdir=terraform
+    gitleaks:
+      run: gitleaks protect --staged
