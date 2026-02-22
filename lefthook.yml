@@ -1,18 +1,24 @@
 pre-commit:
+  parallel: true
   commands:
     fmt-check:
-      glob: "terraform/*.tf"
-      run: cd terraform && terraform fmt -check
+      root: "terraform/"
+      glob: "*.tf"
+      run: terraform fmt -check
+      fail_text: "Run 'mise run tf fmt' to fix formatting"
     validate:
-      glob: "terraform/*.tf"
-      run: cd terraform && terraform validate
+      root: "terraform/"
+      glob: "*.tf"
+      run: terraform validate
     lint:
-      glob: "terraform/*.tf"
-      run: tflint --chdir=terraform
+      root: "terraform/"
+      glob: "*.tf"
+      run: tflint
     gitleaks:
       run: gitleaks protect --staged
 
 commit-msg:
   commands:
     conventional:
-      run: 'grep -qE "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .+" {1}'
+      run: 'grep -qE "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+" {1}'
+      fail_text: "Commit message must follow conventional commits: type(scope): message"
