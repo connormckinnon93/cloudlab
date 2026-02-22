@@ -48,7 +48,7 @@ resource "talos_machine_configuration_apply" "controlplane" {
       machine = {
         install = {
           disk  = "/dev/sda"
-          image = "factory.talos.dev/installer/${var.talos_schematic_id}:${var.talos_version}"
+          image = "factory.talos.dev/installer-secureboot/${var.talos_schematic_id}:${var.talos_version}"
         }
         network = {
           interfaces = [{
