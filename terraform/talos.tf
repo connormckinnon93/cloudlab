@@ -86,6 +86,35 @@ resource "talos_machine_configuration_apply" "controlplane" {
       auto       = "off"
       hostname   = var.vm_name
     }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "VolumeConfig"
+      name       = "STATE"
+      encryption = {
+        provider = "luks2"
+        keys = [{
+          tpm = {
+            checkSecurebootStatusOnEnroll = true
+          }
+          slot = 0
+        }]
+      }
+    }),
+    yamlencode({
+      apiVersion = "v1alpha1"
+      kind       = "VolumeConfig"
+      name       = "EPHEMERAL"
+      encryption = {
+        provider = "luks2"
+        keys = [{
+          tpm = {
+            checkSecurebootStatusOnEnroll = true
+          }
+          slot        = 0
+          lockToState = true
+        }]
+      }
+    }),
   ]
 }
 
