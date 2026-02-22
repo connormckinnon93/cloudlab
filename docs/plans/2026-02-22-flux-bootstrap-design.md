@@ -41,7 +41,7 @@ What must never be committed:
 
 `flux bootstrap github` creates a read-only SSH deploy key scoped to this single repo. The process requires a GitHub personal access token (PAT) at bootstrap time only — Flux uses the PAT to register the deploy key, then discards it. The PAT never enters the cluster.
 
-Grant the PAT minimal scope: `repo` only, with a short expiration (1 day).
+Use a fine-grained PAT scoped to the `cloudlab` repository only, with a short expiration (1 day). Required permissions: Administration (read/write) to create the deploy key, Contents (read/write) to push the flux-system manifests, and Metadata (read-only, auto-granted).
 
 ## Changes
 
@@ -68,7 +68,7 @@ Flux watches only the `kubernetes/` path. Terraform changes do not trigger recon
 Two child Kustomizations enforce dependency ordering:
 
 ```yaml
-# kubernetes/infrastructure/kustomization.yaml
+# kubernetes/flux-system/infrastructure.yaml
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -76,17 +76,20 @@ metadata:
   namespace: flux-system
 spec:
   interval: 10m
+  retryInterval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
   path: ./kubernetes/infrastructure
   prune: true
+  wait: true
+  timeout: 5m
   dependsOn:
     - name: flux-system
 ```
 
 ```yaml
-# kubernetes/apps/kustomization.yaml
+# kubernetes/flux-system/apps.yaml
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -94,11 +97,14 @@ metadata:
   namespace: flux-system
 spec:
   interval: 10m
+  retryInterval: 2m
   sourceRef:
     kind: GitRepository
     name: flux-system
   path: ./kubernetes/apps
   prune: true
+  wait: true
+  timeout: 5m
   dependsOn:
     - name: infrastructure
 ```
@@ -136,7 +142,7 @@ Three execution contexts, layered for speed and thoroughness:
 - `tflint`
 - `kustomize build kubernetes/`
 - `kubeconform` (full schema validation on built manifests)
-- `gitleaks detect`
+- `gitleaks git`
 
 **GitHub Actions (on PRs, gates merge):**
 
