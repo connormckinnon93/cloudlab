@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mise run tf:*)",
+      "Bash(mise run setup)"
+    ]
+  }
+}
