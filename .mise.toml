@@ -59,6 +59,22 @@ set -e
 (umask 077 && sops decrypt output/kubeconfig.enc.yaml > output/kubeconfig.yaml)
 """
 
+[tasks."tf:provision"]
+description = "Apply Terraform, re-bootstrap, and refresh local configs"
+dir = "terraform"
+run = """
+set -e
+terraform apply -replace=talos_machine_bootstrap.this -replace=talos_cluster_kubeconfig.this
+mkdir -p output
+terraform output -raw talosconfig > output/talosconfig.enc.yaml
+sops encrypt -i output/talosconfig.enc.yaml
+terraform output -raw kubeconfig > output/kubeconfig.enc.yaml
+sops encrypt -i output/kubeconfig.enc.yaml
+(umask 077 && sops decrypt output/talosconfig.enc.yaml > output/talosconfig.yaml)
+(umask 077 && sops decrypt output/kubeconfig.enc.yaml > output/kubeconfig.yaml)
+echo "Done. Verify with: kubectl get nodes"
+"""
+
 [tasks."sops:edit"]
 description = "Decrypt, edit, and re-encrypt secrets"
 raw = true
