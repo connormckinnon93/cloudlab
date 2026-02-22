@@ -81,3 +81,4 @@ Secrets are encrypted with SOPS (age backend) and stored in git. The SOPS Terraf
 - **NFS persistent volumes** — Mount Synology NAS exports for stateful workloads
 - **Disk encryption** — LUKS2 encryption on STATE and EPHEMERAL partitions via Talos VolumeConfig
 - **High availability** — Multi-node cluster with re-enabled discovery service
+- **Remote state** — Migrate from local `terraform.tfstate` to a remote backend (e.g., S3-compatible on Synology NAS) for state locking and durability

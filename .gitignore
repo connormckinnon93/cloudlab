@@ -4,6 +4,7 @@
 # Terraform
 terraform/.terraform/
 terraform/terraform.tfstate
+terraform/.terraform.tfstate.lock.info
 terraform/terraform.tfvars
 terraform/*.tfvars.json
 !terraform/config.auto.tfvars
@@ -19,5 +20,5 @@ terraform/*_override.tf.json
 .claude/settings.local.json
 
 # Decrypted output (encrypted versions are tracked)
-terraform/output/talosconfig.yaml
-terraform/output/kubeconfig.yaml
+terraform/output/*
+!terraform/output/*.enc.*
