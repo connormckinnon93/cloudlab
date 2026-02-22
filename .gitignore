@@ -1,0 +1,19 @@
+# Age private key
+.age-key.txt
+
+# Terraform
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/*.tfvars
+terraform/*.tfvars.json
+terraform/*.tfplan
+terraform/terraform.tfstate.backup
+terraform/crash.log
+terraform/override.tf
+terraform/override.tf.json
+terraform/*_override.tf
+terraform/*_override.tf.json
+
+# Decrypted output (encrypted versions are tracked)
+terraform/output/talosconfig.yaml
+terraform/output/kubeconfig.yaml
