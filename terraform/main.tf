@@ -58,7 +58,14 @@ resource "proxmox_virtual_environment_vm" "talos" {
   }
 
   efi_disk {
+    datastore_id      = "local-lvm"
+    type              = "4m"
+    pre_enrolled_keys = false
+  }
+
+  tpm_state {
     datastore_id = "local-lvm"
+    version      = "v2.0"
   }
 
   disk {
