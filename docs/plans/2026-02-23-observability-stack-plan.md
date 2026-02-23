@@ -4,7 +4,7 @@
 
 **Goal:** Deploy a unified observability stack — metrics, logs, and alerting — with Pushover notifications and Grafana as the single interface.
 
-**Architecture:** kube-prometheus-stack provides Prometheus, Grafana, Alertmanager, and pre-built dashboards. Loki aggregates logs in single-binary mode. Alloy collects container logs and ships them to Loki. Flux notification-controller pushes GitOps events to Alertmanager. All components share the `monitoring` namespace and use NFS-backed persistent storage.
+**Architecture:** kube-prometheus-stack provides Prometheus, Grafana, Alertmanager, and pre-built dashboards. Loki aggregates logs in single-binary mode. Alloy collects container logs via the Kubernetes API and ships them to Loki. Flux notification-controller pushes GitOps events to Alertmanager. All components share the `monitoring` namespace and use NFS-backed persistent storage.
 
 **Tech Stack:** kube-prometheus-stack (chart 82.x), Loki (chart 6.x), Alloy (chart 1.x), Flux notification-controller, SOPS, Kustomize, Gateway API HTTPRoutes.
 
@@ -16,12 +16,22 @@
 
 ---
 
-## Task 1: Create monitoring namespace and HelmRepository
+## Structural Decision: Single `monitoring/` Directory
+
+All observability components share the `monitoring` namespace. Rather than three separate directories (`monitoring/`, `loki/`, `alloy/`) with cross-directory HelmRepository dependencies, everything lives in one `kubernetes/infrastructure/monitoring/` directory. This eliminates hidden dependencies, matches the shared namespace, and keeps the directory self-contained.
+
+The parent `kubernetes/infrastructure/kustomization.yaml` adds only `monitoring` — not `loki` or `alloy`.
+
+---
+
+## Task 1: Create monitoring namespace and HelmRepositories
 
 **Files:**
 - Create: `kubernetes/infrastructure/monitoring/namespace.yaml`
-- Create: `kubernetes/infrastructure/monitoring/helmrepository.yaml`
+- Create: `kubernetes/infrastructure/monitoring/helmrepository-prometheus-community.yaml`
+- Create: `kubernetes/infrastructure/monitoring/helmrepository-grafana.yaml`
 - Create: `kubernetes/infrastructure/monitoring/kustomization.yaml`
+- Modify: `kubernetes/infrastructure/kustomization.yaml`
 
 **Step 1: Create the namespace**
 
@@ -33,10 +43,10 @@ metadata:
   name: monitoring
 ```
 
-**Step 2: Create the HelmRepository for prometheus-community**
+**Step 2: Create the prometheus-community HelmRepository**
 
 ```yaml
-# kubernetes/infrastructure/monitoring/helmrepository.yaml
+# kubernetes/infrastructure/monitoring/helmrepository-prometheus-community.yaml
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:
@@ -47,7 +57,23 @@ spec:
   url: https://prometheus-community.github.io/helm-charts
 ```
 
-**Step 3: Create the Kustomize entry point**
+**Step 3: Create the grafana HelmRepository**
+
+Loki and Alloy both use Grafana's chart repository. Co-located here with the namespace that owns it.
+
+```yaml
+# kubernetes/infrastructure/monitoring/helmrepository-grafana.yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  interval: 60m
+  url: https://grafana.github.io/helm-charts
+```
+
+**Step 4: Create the Kustomize entry point**
 
 ```yaml
 # kubernetes/infrastructure/monitoring/kustomization.yaml
@@ -55,23 +81,36 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespace.yaml
-  - helmrepository.yaml
+  - helmrepository-prometheus-community.yaml
+  - helmrepository-grafana.yaml
 ```
 
-**Step 4: Register monitoring in the parent kustomization**
+**Step 5: Register monitoring in the parent kustomization**
 
-Edit `kubernetes/infrastructure/kustomization.yaml` — add `monitoring` to the resources list.
+Edit `kubernetes/infrastructure/kustomization.yaml` to the following final resource list:
 
-**Step 5: Run validation**
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gateway-api
+  - cert-manager
+  - traefik
+  - nfs-provisioner
+  - kyverno
+  - monitoring
+```
+
+**Step 6: Run validation**
 
 Run: `mise run check`
 Expected: all checks pass, monitoring resources appear in kubeconform output for `kubernetes/infrastructure/`.
 
-**Step 6: Commit**
+**Step 7: Commit**
 
 ```bash
 git add kubernetes/infrastructure/monitoring/ kubernetes/infrastructure/kustomization.yaml
-git commit -m "feat(monitoring): add namespace and prometheus-community HelmRepository"
+git commit -m "feat(monitoring): add namespace and Helm chart repositories"
 ```
 
 ---
@@ -97,6 +136,7 @@ type: Opaque
 stringData:
   pushover-user-key: "<USER_KEY>"
   pushover-api-token: "<API_TOKEN>"
+  grafana-admin-user: "admin"
   grafana-admin-password: "<ADMIN_PASSWORD>"
 ```
 
@@ -126,13 +166,13 @@ git commit -m "feat(monitoring): add SOPS-encrypted Pushover and Grafana credent
 ## Task 3: Create kube-prometheus-stack HelmRelease
 
 **Files:**
-- Create: `kubernetes/infrastructure/monitoring/helmrelease.yaml`
+- Create: `kubernetes/infrastructure/monitoring/helmrelease-kube-prometheus-stack.yaml`
 - Modify: `kubernetes/infrastructure/monitoring/kustomization.yaml`
 
 **Step 1: Create the HelmRelease**
 
 ```yaml
-# kubernetes/infrastructure/monitoring/helmrelease.yaml
+# kubernetes/infrastructure/monitoring/helmrelease-kube-prometheus-stack.yaml
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -140,7 +180,7 @@ metadata:
   namespace: monitoring
 spec:
   interval: 30m
-  timeout: 10m
+  timeout: 10m # Large chart with many subcharts
   chart:
     spec:
       chart: kube-prometheus-stack
@@ -166,9 +206,9 @@ spec:
         resources:
           requests:
             cpu: 100m
-            memory: 256Mi
-          limits:
             memory: 512Mi
+          limits:
+            memory: 1Gi
         storageSpec:
           volumeClaimTemplate:
             spec:
@@ -178,31 +218,37 @@ spec:
               resources:
                 requests:
                   storage: 10Gi
-        additionalPrometheusRulesMap:
-          flux-rules:
-            groups:
-              - name: flux.rules
-                rules:
-                  - alert: FluxReconciliationFailure
-                    expr: gotk_reconcile_condition{type="Ready",status="False"} == 1
-                    for: 5m
-                    labels:
-                      severity: warning
-                    annotations:
-                      summary: "Flux {{ $labels.kind }}/{{ $labels.name }} reconciliation failed"
-                      description: "{{ $labels.kind }}/{{ $labels.name }} in namespace {{ $labels.exported_namespace }} has been failing for more than 5 minutes."
-          cert-manager-rules:
-            groups:
-              - name: cert-manager.rules
-                rules:
-                  - alert: CertManagerCertExpirySoon
-                    expr: certmanager_certificate_expiration_timestamp_seconds - time() < 604800
-                    for: 1h
-                    labels:
-                      severity: warning
-                    annotations:
-                      summary: "Certificate {{ $labels.name }} expires in less than 7 days"
-                      description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} expires in {{ $value | humanizeDuration }}."
+      thanosService:
+        enabled: false
+      thanosServiceMonitor:
+        enabled: false
+
+    # Custom alert rules (top-level chart key, not under prometheus.prometheusSpec)
+    additionalPrometheusRulesMap:
+      flux-rules:
+        groups:
+          - name: flux.rules
+            rules:
+              - alert: FluxReconciliationFailure
+                expr: gotk_reconcile_condition{type="Ready",status="False"} == 1
+                for: 5m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Flux {{ $labels.kind }}/{{ $labels.name }} reconciliation failed"
+                  description: "{{ $labels.kind }}/{{ $labels.name }} in namespace {{ $labels.exported_namespace }} has been failing for more than 5 minutes."
+      cert-manager-rules:
+        groups:
+          - name: cert-manager.rules
+            rules:
+              - alert: CertManagerCertExpirySoon
+                expr: certmanager_certificate_expiration_timestamp_seconds - time() < 604800
+                for: 1h
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Certificate {{ $labels.name }} expires in less than 7 days"
+                  description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} expires in {{ $value | humanizeDuration }}."
 
     # Alertmanager
     alertmanager:
@@ -222,6 +268,8 @@ spec:
               resources:
                 requests:
                   storage: 1Gi
+        secrets:
+          - monitoring-secrets
       config:
         global:
           resolve_timeout: 5m
@@ -252,8 +300,6 @@ spec:
               - user_key_file: /etc/alertmanager/secrets/monitoring-secrets/pushover-user-key
                 token_file: /etc/alertmanager/secrets/monitoring-secrets/pushover-api-token
                 priority: "1"
-                retry: 300s
-                expire: 3600s
                 title: '{{ "{{" }} .CommonLabels.alertname {{ "}}" }}'
                 message: '{{ "{{" }} range .Alerts {{ "}}" }}{{ "{{" }} .Annotations.summary {{ "}}" }}{{ "{{" }} end {{ "}}" }}'
           - name: pushover-warning
@@ -263,8 +309,6 @@ spec:
                 priority: "0"
                 title: '{{ "{{" }} .CommonLabels.alertname {{ "}}" }}'
                 message: '{{ "{{" }} range .Alerts {{ "}}" }}{{ "{{" }} .Annotations.summary {{ "}}" }}{{ "{{" }} end {{ "}}" }}'
-      secrets:
-        - monitoring-secrets
 
     # Grafana
     grafana:
@@ -285,13 +329,6 @@ spec:
           memory: 128Mi
         limits:
           memory: 256Mi
-
-    # Thanos — disabled
-    prometheus:
-      thanosService:
-        enabled: false
-      thanosServiceMonitor:
-        enabled: false
 
     # node-exporter
     nodeExporter:
@@ -314,13 +351,11 @@ spec:
 
 **Important:** Pin to the exact latest chart version at implementation time. Check `helm search repo prometheus-community/kube-prometheus-stack --versions | head -1` or use the version from research (82.2.1). Replace `"82.x.x"` with the exact version.
 
-**Note on Pushover credentials:** kube-prometheus-stack's Alertmanager supports mounting Secrets via `alertmanager.secrets`. The Secret is mounted at `/etc/alertmanager/secrets/<secret-name>/`. The `user_key_file` and `token_file` fields read credentials from those mounted files — this avoids putting secrets directly in the Alertmanager config.
-
-**Note on Grafana admin:** The `existingSecret` must contain keys matching `userKey` and `passwordKey`. Add `grafana-admin-user: admin` to the Secret's `stringData` in Task 2.
+**Note on Pushover credentials:** kube-prometheus-stack's Alertmanager mounts Secrets listed in `alertmanager.alertmanagerSpec.secrets` at `/etc/alertmanager/secrets/<secret-name>/`. The `user_key_file` and `token_file` fields read credentials from those mounted files — this avoids putting secrets directly in the Alertmanager config.
 
 **Step 2: Add to kustomization**
 
-Edit `kubernetes/infrastructure/monitoring/kustomization.yaml` — add `helmrelease.yaml` to resources.
+Edit `kubernetes/infrastructure/monitoring/kustomization.yaml` — add `helmrelease-kube-prometheus-stack.yaml` to resources.
 
 **Step 3: Run validation**
 
@@ -330,7 +365,7 @@ Expected: all checks pass. The HelmRelease resource validates via kubeconform.
 **Step 4: Commit**
 
 ```bash
-git add kubernetes/infrastructure/monitoring/helmrelease.yaml kubernetes/infrastructure/monitoring/kustomization.yaml
+git add kubernetes/infrastructure/monitoring/helmrelease-kube-prometheus-stack.yaml kubernetes/infrastructure/monitoring/kustomization.yaml
 git commit -m "feat(monitoring): add kube-prometheus-stack HelmRelease with Pushover alerting"
 ```
 
@@ -369,7 +404,7 @@ spec:
           port: 80
 ```
 
-**Note:** The Grafana service name follows kube-prometheus-stack's naming convention: `<release-name>-grafana`. Since the HelmRelease is named `kube-prometheus-stack`, the service is `kube-prometheus-stack-grafana`. Verify this after deployment with `kubectl get svc -n monitoring`.
+**Note:** The Grafana service name follows kube-prometheus-stack's naming convention: `<release-name>-grafana`. Since the HelmRelease is named `kube-prometheus-stack`, the service is `kube-prometheus-stack-grafana`. Verify after deployment with `kubectl get svc -n monitoring`.
 
 **Step 2: Create the Prometheus HTTPRoute**
 
@@ -439,38 +474,19 @@ git commit -m "feat(monitoring): add HTTPRoutes for Grafana, Prometheus, and Ale
 
 ---
 
-## Task 5: Create Loki HelmRepository, HelmRelease, and Grafana datasource
+## Task 5: Create Loki HelmRelease and Grafana datasource
+
+All Loki resources live in `kubernetes/infrastructure/monitoring/` alongside the other observability components.
 
 **Files:**
-- Create: `kubernetes/infrastructure/loki/namespace.yaml`
-- Create: `kubernetes/infrastructure/loki/helmrepository.yaml`
-- Create: `kubernetes/infrastructure/loki/helmrelease.yaml`
-- Create: `kubernetes/infrastructure/loki/grafana-datasource.yaml`
-- Create: `kubernetes/infrastructure/loki/kustomization.yaml`
-- Modify: `kubernetes/infrastructure/kustomization.yaml`
+- Create: `kubernetes/infrastructure/monitoring/helmrelease-loki.yaml`
+- Create: `kubernetes/infrastructure/monitoring/grafana-datasource-loki.yaml`
+- Modify: `kubernetes/infrastructure/monitoring/kustomization.yaml`
 
-**Step 1: Create the namespace**
-
-Loki shares the `monitoring` namespace. Create a namespace reference that points to the same namespace — or skip a dedicated namespace file and reference the monitoring namespace directly.
-
-Actually, per the design, all components share the `monitoring` namespace. Loki does not need its own namespace file. Set all Loki resources to `namespace: monitoring`.
+**Step 1: Create the HelmRelease**
 
 ```yaml
-# kubernetes/infrastructure/loki/helmrepository.yaml
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
-  name: grafana
-  namespace: monitoring
-spec:
-  interval: 60m
-  url: https://grafana.github.io/helm-charts
-```
-
-**Step 2: Create the HelmRelease**
-
-```yaml
-# kubernetes/infrastructure/loki/helmrelease.yaml
+# kubernetes/infrastructure/monitoring/helmrelease-loki.yaml
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -478,7 +494,7 @@ metadata:
   namespace: monitoring
 spec:
   interval: 30m
-  timeout: 10m
+  timeout: 5m
   dependsOn:
     - name: kube-prometheus-stack
   chart:
@@ -516,11 +532,31 @@ spec:
       replicas: 0
     write:
       replicas: 0
+    ingester:
+      replicas: 0
+    querier:
+      replicas: 0
+    queryFrontend:
+      replicas: 0
+    queryScheduler:
+      replicas: 0
+    distributor:
+      replicas: 0
+    compactor:
+      replicas: 0
+    indexGateway:
+      replicas: 0
+    bloomCompactor:
+      replicas: 0
+    bloomGateway:
+      replicas: 0
     # Loki config
     loki:
       auth_enabled: false
       commonConfig:
         replication_factor: 1
+      compactor:
+        retention_enabled: true
       limits_config:
         retention_period: 168h
       schemaConfig:
@@ -550,12 +586,14 @@ spec:
 
 **Important:** Pin to the exact latest chart version at implementation time. Replace `"6.x.x"` with the exact version (e.g., 6.53.0).
 
-**Step 3: Create the Grafana datasource ConfigMap**
+**Note on NFS storage:** Loki's TSDB on NFS is a known risk area due to NFS's weaker fsync semantics. In single-binary mode only one pod writes, eliminating multi-writer contention. If corruption occurs, the fallback is switching Loki's PVC to a `hostPath` volume on the node's local NVMe.
+
+**Step 2: Create the Grafana datasource ConfigMap**
 
 kube-prometheus-stack's Grafana sidecar watches for ConfigMaps with the label `grafana_datasource: "1"` and auto-registers them as datasources.
 
 ```yaml
-# kubernetes/infrastructure/loki/grafana-datasource.yaml
+# kubernetes/infrastructure/monitoring/grafana-datasource-loki.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -574,48 +612,41 @@ data:
         isDefault: false
 ```
 
-**Step 4: Create the Kustomize entry point**
+**Note:** The Loki service name (`loki`) matches the HelmRelease name. Verify after deployment with `kubectl get svc -n monitoring`.
 
-```yaml
-# kubernetes/infrastructure/loki/kustomization.yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - helmrepository.yaml
-  - helmrelease.yaml
-  - grafana-datasource.yaml
-```
+**Step 3: Add to kustomization**
 
-**Step 5: Register loki in the parent kustomization**
+Edit `kubernetes/infrastructure/monitoring/kustomization.yaml` — add `helmrelease-loki.yaml` and `grafana-datasource-loki.yaml` to resources.
 
-Edit `kubernetes/infrastructure/kustomization.yaml` — add `loki` to the resources list.
-
-**Step 6: Run validation**
+**Step 4: Run validation**
 
 Run: `mise run check`
 Expected: all checks pass. Loki resources appear in kubeconform output.
 
-**Step 7: Commit**
+**Step 5: Commit**
 
 ```bash
-git add kubernetes/infrastructure/loki/ kubernetes/infrastructure/kustomization.yaml
-git commit -m "feat(loki): add Loki single-binary with Grafana datasource auto-discovery"
+git add kubernetes/infrastructure/monitoring/helmrelease-loki.yaml kubernetes/infrastructure/monitoring/grafana-datasource-loki.yaml kubernetes/infrastructure/monitoring/kustomization.yaml
+git commit -m "feat(monitoring): add Loki single-binary with Grafana datasource auto-discovery"
 ```
 
 ---
 
 ## Task 6: Create Alloy HelmRelease and HTTPRoute
 
+All Alloy resources live in `kubernetes/infrastructure/monitoring/`.
+
 **Files:**
-- Create: `kubernetes/infrastructure/alloy/helmrelease.yaml`
-- Create: `kubernetes/infrastructure/alloy/httproute-alloy.yaml`
-- Create: `kubernetes/infrastructure/alloy/kustomization.yaml`
-- Modify: `kubernetes/infrastructure/kustomization.yaml`
+- Create: `kubernetes/infrastructure/monitoring/helmrelease-alloy.yaml`
+- Create: `kubernetes/infrastructure/monitoring/httproute-alloy.yaml`
+- Modify: `kubernetes/infrastructure/monitoring/kustomization.yaml`
 
 **Step 1: Create the HelmRelease**
 
+Alloy uses `loki.source.kubernetes` which reads logs via the Kubernetes API, not from files on disk. This is the correct approach for TalosOS (immutable OS). No `/var/log` mount is needed.
+
 ```yaml
-# kubernetes/infrastructure/alloy/helmrelease.yaml
+# kubernetes/infrastructure/monitoring/helmrelease-alloy.yaml
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
@@ -645,10 +676,76 @@ spec:
     alloy:
       configMap:
         create: true
+        content: |
+          // Discover Kubernetes pods on this node
+          discovery.kubernetes "pods" {
+            role = "pod"
+            selectors {
+              role = "pod"
+              field = "spec.nodeName=" + coalesce(sys.env("HOSTNAME"), constants.hostname)
+            }
+          }
+
+          // Relabel pod metadata into log labels
+          discovery.relabel "pod_logs" {
+            targets = discovery.kubernetes.pods.targets
+
+            rule {
+              source_labels = ["__meta_kubernetes_namespace"]
+              action        = "replace"
+              target_label  = "namespace"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_pod_name"]
+              action        = "replace"
+              target_label  = "pod"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_pod_container_name"]
+              action        = "replace"
+              target_label  = "container"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+              action        = "replace"
+              target_label  = "app"
+            }
+
+            rule {
+              source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
+              action        = "replace"
+              target_label  = "job"
+              separator     = "/"
+            }
+          }
+
+          // Collect logs from Kubernetes pods via API
+          loki.source.kubernetes "pod_logs" {
+            targets    = discovery.relabel.pod_logs.output
+            forward_to = [loki.process.pod_logs.receiver]
+          }
+
+          // Add cluster label
+          loki.process "pod_logs" {
+            stage.static_labels {
+              values = {
+                cluster = "cloudlab",
+              }
+            }
+            forward_to = [loki.write.default.receiver]
+          }
+
+          // Ship to Loki
+          loki.write "default" {
+            endpoint {
+              url = "http://loki.monitoring.svc:3100/loki/api/v1/push"
+            }
+          }
       clustering:
         enabled: false
-      mounts:
-        varlog: true
     controller:
       type: daemonset
     resources:
@@ -657,93 +754,14 @@ spec:
         memory: 128Mi
       limits:
         memory: 256Mi
-    alloy:
-      config: |
-        // Discover Kubernetes pods on this node
-        discovery.kubernetes "pods" {
-          role = "pod"
-          selectors {
-            role = "pod"
-            field = "spec.nodeName=" + coalesce(sys.env("HOSTNAME"), constants.hostname)
-          }
-        }
-
-        // Relabel pod metadata into log labels
-        discovery.relabel "pod_logs" {
-          targets = discovery.kubernetes.pods.targets
-
-          rule {
-            source_labels = ["__meta_kubernetes_namespace"]
-            action        = "replace"
-            target_label  = "namespace"
-          }
-
-          rule {
-            source_labels = ["__meta_kubernetes_pod_name"]
-            action        = "replace"
-            target_label  = "pod"
-          }
-
-          rule {
-            source_labels = ["__meta_kubernetes_pod_container_name"]
-            action        = "replace"
-            target_label  = "container"
-          }
-
-          rule {
-            source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
-            action        = "replace"
-            target_label  = "app"
-          }
-
-          rule {
-            source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_container_name"]
-            action        = "replace"
-            target_label  = "job"
-            separator     = "/"
-          }
-
-          rule {
-            source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
-            action        = "replace"
-            target_label  = "__path__"
-            separator     = "/"
-            replacement   = "/var/log/pods/*$1/*.log"
-          }
-        }
-
-        // Collect logs from Kubernetes pods
-        loki.source.kubernetes "pod_logs" {
-          targets    = discovery.relabel.pod_logs.output
-          forward_to = [loki.process.pod_logs.receiver]
-        }
-
-        // Add cluster label
-        loki.process "pod_logs" {
-          stage.static_labels {
-            values = {
-              cluster = "cloudlab",
-            }
-          }
-          forward_to = [loki.write.default.receiver]
-        }
-
-        // Ship to Loki
-        loki.write "default" {
-          endpoint {
-            url = "http://loki.monitoring.svc:3100/loki/api/v1/push"
-          }
-        }
 ```
 
 **Important:** Pin to the exact latest chart version. Replace `"1.x.x"` with the exact version (e.g., 1.6.0).
 
-**Note on Alloy config placement:** The Alloy Helm chart accepts River config via `alloy.config` in values. The exact values path may vary by chart version — verify with `helm show values grafana/alloy | grep -A5 config` at implementation time. Adjust the path if the chart uses a different key (e.g., `alloy.configMap.content`).
-
 **Step 2: Create the Alloy HTTPRoute**
 
 ```yaml
-# kubernetes/infrastructure/alloy/httproute-alloy.yaml
+# kubernetes/infrastructure/monitoring/httproute-alloy.yaml
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -767,36 +785,96 @@ spec:
 
 **Note:** Alloy's default UI port is 12345. Verify with `kubectl get svc -n monitoring` after deployment.
 
-**Step 3: Create the Kustomize entry point**
+**Step 3: Add to kustomization**
 
-```yaml
-# kubernetes/infrastructure/alloy/kustomization.yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - helmrelease.yaml
-  - httproute-alloy.yaml
-```
+Edit `kubernetes/infrastructure/monitoring/kustomization.yaml` — add `helmrelease-alloy.yaml` and `httproute-alloy.yaml` to resources.
 
-**Step 4: Register alloy in the parent kustomization**
-
-Edit `kubernetes/infrastructure/kustomization.yaml` — add `alloy` to the resources list.
-
-**Step 5: Run validation**
+**Step 4: Run validation**
 
 Run: `mise run check`
 Expected: all checks pass.
 
-**Step 6: Commit**
+**Step 5: Commit**
 
 ```bash
-git add kubernetes/infrastructure/alloy/ kubernetes/infrastructure/kustomization.yaml
-git commit -m "feat(alloy): add Alloy DaemonSet for Kubernetes log collection"
+git add kubernetes/infrastructure/monitoring/helmrelease-alloy.yaml kubernetes/infrastructure/monitoring/httproute-alloy.yaml kubernetes/infrastructure/monitoring/kustomization.yaml
+git commit -m "feat(monitoring): add Alloy DaemonSet for Kubernetes log collection"
 ```
 
 ---
 
-## Task 7: Create Flux notification Provider and Alert
+## Task 7: Enable metrics scraping for custom alert rules
+
+The custom PrometheusRules (FluxReconciliationFailure, CertManagerCertExpirySoon) query metrics that Prometheus does not scrape by default. This task adds the required PodMonitor and ServiceMonitor.
+
+**Files:**
+- Create: `kubernetes/infrastructure/monitoring/podmonitor-flux.yaml`
+- Modify: `kubernetes/infrastructure/monitoring/kustomization.yaml`
+- Modify: `kubernetes/infrastructure/cert-manager/helmrelease.yaml`
+
+**Step 1: Create a PodMonitor for Flux controllers**
+
+```yaml
+# kubernetes/infrastructure/monitoring/podmonitor-flux.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: flux-system
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: flux
+spec:
+  namespaceSelector:
+    matchNames:
+      - flux-system
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - helm-controller
+          - source-controller
+          - kustomize-controller
+          - notification-controller
+  podMetricsEndpoints:
+    - port: http-prom
+```
+
+**Note:** This PodMonitor lives in the `monitoring` namespace so Prometheus discovers it automatically (kube-prometheus-stack's Prometheus watches its own namespace for monitor resources by default). It targets Flux controller pods in `flux-system` via `namespaceSelector`.
+
+**Step 2: Enable cert-manager's ServiceMonitor**
+
+Edit `kubernetes/infrastructure/cert-manager/helmrelease.yaml` — add to the `values` section:
+
+```yaml
+  values:
+    # ... existing values ...
+    prometheus:
+      servicemonitor:
+        enabled: true
+```
+
+This tells the cert-manager Helm chart to create a ServiceMonitor resource so Prometheus scrapes cert-manager's `/metrics` endpoint, which exposes `certmanager_certificate_expiration_timestamp_seconds`.
+
+**Step 3: Add PodMonitor to kustomization**
+
+Edit `kubernetes/infrastructure/monitoring/kustomization.yaml` — add `podmonitor-flux.yaml` to resources.
+
+**Step 4: Run validation**
+
+Run: `mise run check`
+Expected: all checks pass.
+
+**Step 5: Commit**
+
+```bash
+git add kubernetes/infrastructure/monitoring/podmonitor-flux.yaml kubernetes/infrastructure/monitoring/kustomization.yaml kubernetes/infrastructure/cert-manager/helmrelease.yaml
+git commit -m "feat(monitoring): enable Flux and cert-manager metrics scraping for custom alert rules"
+```
+
+---
+
+## Task 8: Create Flux notification Provider and Alert
 
 **Files:**
 - Create: `kubernetes/flux-system/provider-alertmanager.yaml`
@@ -814,12 +892,14 @@ metadata:
   namespace: flux-system
 spec:
   type: alertmanager
-  address: http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2/alerts
+  address: http://kube-prometheus-stack-alertmanager.monitoring.svc:9093/api/v2/alerts/
 ```
 
-**Note:** No authentication needed — cluster-internal traffic. The address uses the service DNS name in the monitoring namespace.
+**Note:** No authentication needed — cluster-internal traffic. The address uses the service DNS name in the monitoring namespace. Trailing slash matches Flux documentation convention.
 
 **Step 2: Create the Alert resource**
+
+The Alert must list event sources from both `flux-system` (default) and `monitoring` (where HelmReleases live). Flux does not support wildcard namespaces — each must be listed explicitly.
 
 ```yaml
 # kubernetes/flux-system/alert-flux.yaml
@@ -833,19 +913,31 @@ spec:
     name: alertmanager
   eventSeverity: error
   eventSources:
+    # flux-system namespace (default when namespace omitted)
     - kind: GitRepository
       name: "*"
     - kind: Kustomization
       name: "*"
+    # monitoring namespace (cross-namespace for observability HelmReleases)
     - kind: HelmRelease
       name: "*"
+      namespace: flux-system
+    - kind: HelmRelease
+      name: "*"
+      namespace: monitoring
     - kind: HelmRepository
       name: "*"
+      namespace: flux-system
+    - kind: HelmRepository
+      name: "*"
+      namespace: monitoring
 ```
 
 **Step 3: Add to flux-system kustomization**
 
 Edit `kubernetes/flux-system/kustomization.yaml` — add `provider-alertmanager.yaml` and `alert-flux.yaml` to the resources list.
+
+**Note:** This file already contains manual additions (`infrastructure.yaml`, `cluster-policies.yaml`, `apps.yaml`) alongside the Flux-generated entries. Running `flux bootstrap` again could overwrite it — document this in CLAUDE.md.
 
 **Step 4: Run validation**
 
@@ -861,7 +953,7 @@ git commit -m "feat(flux): add Alertmanager provider and alert for GitOps failur
 
 ---
 
-## Task 8: Update /etc/hosts and validate the full stack
+## Task 9: Update /etc/hosts and validate the full stack
 
 **Prerequisites:** All previous tasks committed and pushed. Flux has reconciled the changes on the cluster.
 
@@ -887,7 +979,7 @@ Expected: `kube-prometheus-stack`, `loki`, and `alloy` all show `Ready: True`.
 **Step 3: Verify Prometheus targets**
 
 Open: `https://prometheus.catinthehack.ca/targets`
-Expected: all scrape targets show `UP` (green).
+Expected: all scrape targets show `UP` (green). Confirm Flux controller targets and cert-manager target are present.
 
 **Step 4: Verify Grafana**
 
@@ -927,7 +1019,7 @@ Clean up: revert the deliberate break.
 
 ---
 
-## Task 9: Update documentation
+## Task 10: Update documentation
 
 **Files:**
 - Modify: `CLAUDE.md` — add implementation notes for observability stack
@@ -937,13 +1029,16 @@ Clean up: revert the deliberate break.
 
 Add to the Implementation Notes section:
 
-- **Observability namespace**: All monitoring components (Prometheus, Grafana, Alertmanager, Loki, Alloy) share the `monitoring` namespace. No component has its own namespace.
+- **Observability namespace**: All monitoring components (Prometheus, Grafana, Alertmanager, Loki, Alloy) share the `monitoring` namespace in a single `kubernetes/infrastructure/monitoring/` directory. This is a deliberate deviation from the one-namespace-per-component pattern — these components form a tightly coupled system.
 - **Grafana datasource auto-discovery**: kube-prometheus-stack's Grafana sidecar watches for ConfigMaps labeled `grafana_datasource: "1"` in the monitoring namespace. Loki registers via this mechanism.
-- **Alertmanager Pushover credentials**: Mounted from the `monitoring-secrets` Secret via `alertmanager.secrets` in kube-prometheus-stack values. Credentials read from files at `/etc/alertmanager/secrets/monitoring-secrets/`.
-- **Alloy River config**: Embedded in HelmRelease values. Uses `loki.source.kubernetes` for pod log collection with label enrichment (namespace, pod, container, app).
-- **Flux notification-controller**: Provider (type: alertmanager) and Alert resources in `flux-system/` push GitOps events to Alertmanager. Second signal path alongside Prometheus scraping Flux metrics.
-- **Loki storage**: Filesystem-backed in single-binary mode. No object storage (MinIO/S3) needed for homelab scale.
+- **Alertmanager Pushover credentials**: Mounted from the `monitoring-secrets` Secret via `alertmanager.alertmanagerSpec.secrets` in kube-prometheus-stack values. Credentials read from files at `/etc/alertmanager/secrets/monitoring-secrets/`.
+- **Alloy log collection**: Uses `loki.source.kubernetes` (Kubernetes API-based) not file-based tailing. No `/var/log` mount needed — correct for TalosOS's immutable filesystem. River config embedded in HelmRelease values via `alloy.configMap.content`.
+- **Flux notification-controller**: Provider (type: alertmanager) and Alert resources in `flux-system/` push GitOps events to Alertmanager. Alert includes cross-namespace event sources for both `flux-system` and `monitoring`. Second signal path alongside Prometheus scraping Flux metrics via PodMonitor.
+- **Flux metrics PodMonitor**: Lives in `monitoring` namespace, targets Flux controller pods in `flux-system` via `namespaceSelector`. Required for the FluxReconciliationFailure custom alert rule.
+- **Loki storage**: Filesystem-backed TSDB in single-binary mode on NFS. Known risk: NFS's weaker fsync semantics. Fallback: switch to hostPath on local NVMe if corruption occurs.
+- **Loki retention**: Requires both `limits_config.retention_period` and `compactor.retention_enabled: true`. Without the compactor flag, expired data is never deleted.
 - **Exposed UIs without auth**: Grafana has built-in login. Prometheus, Alertmanager, and Alloy have no authentication — first candidates for the auth gateway (step 12).
+- **flux-system/kustomization.yaml manual additions**: Contains custom resources (infrastructure.yaml, apps.yaml, cluster-policies.yaml, provider-alertmanager.yaml, alert-flux.yaml) that must be re-added after `flux bootstrap` operations.
 
 **Step 2: Update README.md roadmap**
 
@@ -958,7 +1053,7 @@ git commit -m "docs: add observability stack implementation notes and update roa
 
 ---
 
-## Task 10: Run final validation and create PR
+## Task 11: Run final validation and create PR
 
 **Step 1: Run full validation**
 
@@ -968,10 +1063,10 @@ Expected: all checks pass.
 **Step 2: Review all changes**
 
 Run: `git log --oneline main..HEAD`
-Expected: all commits from tasks 1-9 listed.
+Expected: all commits from tasks 1-10 listed.
 
 Run: `git diff main..HEAD --stat`
-Expected: new files in `kubernetes/infrastructure/monitoring/`, `kubernetes/infrastructure/loki/`, `kubernetes/infrastructure/alloy/`, modifications to parent kustomizations, Flux resources, and documentation.
+Expected: new files in `kubernetes/infrastructure/monitoring/`, modifications to cert-manager HelmRelease, Flux kustomization, and documentation.
 
 **Step 3: Push and create PR**
 
@@ -983,7 +1078,33 @@ Create PR with title: `feat: add observability stack (Prometheus, Loki, Alloy, a
 
 Body should summarize:
 - What was added (kube-prometheus-stack, Loki, Alloy, Flux notifications)
+- All components in single `monitoring/` directory and namespace
 - HTTPRoutes for all four UIs
 - Pushover alerting with critical/warning routing
-- Custom PrometheusRules for Flux and cert-manager
+- Custom PrometheusRules for Flux and cert-manager (with PodMonitor/ServiceMonitor)
 - 7-day retention, NFS-backed storage
+
+---
+
+## Final `monitoring/kustomization.yaml` Reference
+
+After all tasks, the kustomization should contain:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - helmrepository-prometheus-community.yaml
+  - helmrepository-grafana.yaml
+  - secret.enc.yaml
+  - helmrelease-kube-prometheus-stack.yaml
+  - helmrelease-loki.yaml
+  - helmrelease-alloy.yaml
+  - grafana-datasource-loki.yaml
+  - podmonitor-flux.yaml
+  - httproute-grafana.yaml
+  - httproute-prometheus.yaml
+  - httproute-alertmanager.yaml
+  - httproute-alloy.yaml
+```

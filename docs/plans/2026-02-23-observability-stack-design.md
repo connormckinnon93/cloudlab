@@ -119,7 +119,7 @@ A `Provider` (type: alertmanager) and `Alert` resource in `flux-system/` push re
 - **Storage:** NFS-backed 10Gi PVC for chunks and index
 - **Retention:** 7 days (`limits_config.retention_period: 168h`), compactor deletes expired chunks
 - **Auth:** disabled (cluster-internal traffic only)
-- **Grafana datasource:** a ConfigMap labeled `grafana.io/datasource` so kube-prometheus-stack's Grafana sidecar auto-discovers it
+- **Grafana datasource:** a ConfigMap labeled `grafana_datasource: "1"` so kube-prometheus-stack's Grafana sidecar auto-discovers it
 
 ## Alloy Configuration
 
