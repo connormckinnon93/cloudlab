@@ -13,6 +13,8 @@ spec:
   prune: true
   wait: true
   timeout: 5m
+  # First layer after flux-system. Installs CRDs and cluster services
+  # that later layers depend on (cert-manager, Kyverno, Traefik, etc.).
   dependsOn:
     - name: flux-system
   decryption:
