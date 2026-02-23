@@ -10,6 +10,7 @@ gitleaks = "8.30"
 kustomize = "5.8"
 kubeconform = "0.7"
 flux2 = "2.7"
+helm = "3.17"
 
 [env]
 SOPS_AGE_KEY_FILE = "{{config_root}}/.age-key.txt"
