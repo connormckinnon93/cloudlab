@@ -1,0 +1,16 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auth-gateway
+spec:
+  steps:
+  - try:
+    - script:
+        content: |
+          # Follow redirects and check final URL contains authentik
+          location=$(curl -s -o /dev/null -w '%{redirect_url}' --resolve whoami.catinthehack.ca:443:192.168.20.100 https://whoami.catinthehack.ca)
+          if ! echo "$location" | grep -q "authentik"; then
+            echo "Expected redirect to authentik, got: $location"
+            exit 1
+          fi
+          echo "Auth gateway OK: redirected to $location"

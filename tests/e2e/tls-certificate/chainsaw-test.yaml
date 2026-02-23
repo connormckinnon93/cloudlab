@@ -1,0 +1,16 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: tls-certificate
+spec:
+  steps:
+  - try:
+    - script:
+        content: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' --resolve whoami.catinthehack.ca:443:192.168.20.100 https://whoami.catinthehack.ca)
+          # 200 = direct access, 302 = auth redirect (both mean TLS is valid)
+          if [ "$status" != "200" ] && [ "$status" != "302" ]; then
+            echo "Expected 200 or 302, got: $status"
+            exit 1
+          fi
+          echo "TLS OK: got HTTP $status"
