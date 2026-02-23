@@ -50,6 +50,9 @@ mise run flux:sops-key    # Load age key into cluster for SOPS decryption
 | `kubernetes/infrastructure/kyverno/` | Kyverno policy engine (Flux HelmRelease) |
 | `kubernetes/cluster-policies/` | Kyverno ClusterPolicies (applied after infrastructure CRDs exist) |
 | `kubernetes/apps/kustomization.yaml` | Kustomize entry point for workloads (empty until step 14+) |
+| `kubernetes/infrastructure/gateway-api/` | Gateway API CRDs (v1.4.1, vendored) |
+| `kubernetes/infrastructure/cert-manager/` | cert-manager with DNS-01 via DigitalOcean |
+| `kubernetes/infrastructure/traefik/` | Traefik ingress with Gateway API, wildcard TLS |
 
 ## Providers
 
@@ -104,3 +107,10 @@ Three validation contexts: lefthook runs a fast subset on pre-commit (terraform 
 - **SOPS age key in cluster**: The `sops-age` Secret in `flux-system` provides the age private key to kustomize-controller for SOPS decryption. Created via `mise run flux:sops-key` — not managed by Terraform to keep the private key out of state. Re-run after cluster rebuild.
 - **NFS provisioner pattern**: Infrastructure components follow a consistent directory structure under `kubernetes/infrastructure/`: dedicated namespace, HelmRepository, HelmRelease, and a Kustomize entry point. The parent `infrastructure/kustomization.yaml` references each component by directory name. This pattern repeats for ingress, cert-manager, and monitoring.
 - **Kyverno image verification**: The ClusterPolicy verifies GHCR images (`ghcr.io/fluxcd/*`, `ghcr.io/kyverno/*`) in audit mode — unverified images are admitted but violations appear in PolicyReports (`kubectl get policyreport -A`). System namespaces (`kube-system`, `kyverno`) are excluded. Migrating to enforce mode requires reviewing audit results and potentially adding attestor entries for other signing authorities.
+- **Gateway API CRDs**: Vendored from `kubernetes-sigs/gateway-api` v1.4.1 (`standard-install.yaml`). Installed as raw YAML before components that create Gateway or HTTPRoute resources. Flux's kustomize-controller discourages remote HTTP URLs for source provenance, so the file is committed to the repo.
+- **cert-manager DNS-01**: DigitalOcean DNS provider for Let's Encrypt challenges. The SOPS-encrypted API token (`secret.enc.yaml`) lives in the cert-manager directory. The ClusterIssuer is cluster-scoped; cert-manager looks for the token Secret in the cert-manager namespace.
+- **Traefik Gateway API**: Gateway and GatewayClass created by the Helm chart (`gateway.enabled: true`). Default Gateway name is `traefik-gateway`. HTTPRoutes from any namespace can attach (`namespacePolicy.from: All`). Dashboard exposed via HTTPRoute — secure with SSO in step 13.
+- **hostPort binding**: Traefik binds to node ports 80 and 443 via hostPort (mapped from container ports 8000 and 8443). No LoadBalancer or MetalLB needed. HTTP→HTTPS redirect at the entrypoint level, before Gateway routing. The traefik namespace requires `pod-security.kubernetes.io/enforce: privileged` because TalosOS enforces `baseline` PSA by default.
+- **Wildcard certificate**: The Certificate resource lives in the traefik namespace so the TLS Secret is co-located with the Gateway that references it. cert-manager renews automatically 30 days before expiry.
+- **SOPS in kubernetes/**: The `mise run check` task strips `sops:` metadata from kustomize output before kubeconform validation (awk filter). Flux's kustomize-controller decrypts SOPS files at reconciliation time.
+- **Flux retry ordering**: On first deployment, cert-manager CRDs may not exist when kustomize-controller applies ClusterIssuer and Certificate resources. Flux retries (`retryInterval: 2m`) succeed after helm-controller installs cert-manager. This is expected Flux behavior, not an error.

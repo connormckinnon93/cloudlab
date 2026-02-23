@@ -47,13 +47,12 @@ kubernetes/infrastructure/
 │   ├── helmrelease.yaml            # cert-manager chart with CRDs
 │   ├── secret.enc.yaml             # SOPS-encrypted DigitalOcean API token
 │   ├── clusterissuer.yaml          # Let's Encrypt production + DNS-01
-│   ├── certificate.yaml            # Wildcard cert for *.catinthehack.ca
 │   └── kustomization.yaml          # Kustomize entry point
 └── traefik/
-    ├── namespace.yaml              # Dedicated namespace
+    ├── namespace.yaml              # Dedicated namespace (PSA privileged for hostPort)
     ├── helmrepository.yaml         # Traefik Helm repo
     ├── helmrelease.yaml            # Traefik chart with Gateway API config
-    ├── gateway.yaml                # Gateway resource: HTTPS listener
+    ├── certificate.yaml            # Wildcard cert for *.catinthehack.ca
     ├── httproute-dashboard.yaml    # Smoke test: Traefik dashboard route
     └── kustomization.yaml          # Kustomize entry point
 ```
@@ -70,7 +69,7 @@ Each component's Flux Kustomization lives in `kubernetes/flux-system/` alongside
 
 ### Gateway API CRDs
 
-The `gateway-api/kustomization.yaml` references the upstream CRD bundle as a remote Kustomize resource from the `kubernetes-sigs/gateway-api` GitHub release, pinned to a specific version tag (e.g., `standard-install.yaml` from v1.2.1). No Helm chart, no namespace — just cluster-scoped CRDs.
+The `gateway-api/kustomization.yaml` references a vendored copy of the upstream CRD bundle from the `kubernetes-sigs/gateway-api` GitHub release, pinned to v1.4.1 (`standard-install.yaml`). The file is committed to the repo because Flux's kustomize-controller discourages remote HTTP URLs for source provenance. No Helm chart, no namespace — just cluster-scoped CRDs.
 
 This keeps the CRDs independent of Traefik. Other controllers (Cilium, future experiments) can use them without changes.
 
@@ -80,11 +79,13 @@ This keeps the CRDs independent of Traefik. Other controllers (Cilium, future ex
 
 **ClusterIssuer:** Configured for Let's Encrypt production with a DNS-01 solver. The solver uses the `digitalocean` provider and references a Secret containing the API token.
 
-**Certificate:** A single wildcard Certificate for `*.catinthehack.ca`. The resulting TLS Secret is created in the `traefik` namespace so Traefik can reference it directly — cert-manager supports cross-namespace certificate creation natively.
+**Certificate:** A single wildcard Certificate for `*.catinthehack.ca`, defined in the `traefik` namespace so the resulting TLS Secret is co-located with the Gateway that references it.
 
 **DigitalOcean API token:** Stored as a SOPS-encrypted Secret (`secret.enc.yaml`) in the cert-manager namespace. The token needs only DNS read/write scope. Created via `sops encrypt` following the existing `\.enc\.(json|yaml)$` pattern.
 
 ### Traefik
+
+**Namespace:** The traefik namespace requires `pod-security.kubernetes.io/enforce: privileged` label. TalosOS enforces `baseline` Pod Security Admission by default, which blocks hostPort bindings. The `privileged` label exempts the namespace.
 
 **Helm chart:** Traefik Labs' chart, pinned version, configured with:
 
@@ -93,9 +94,7 @@ This keeps the CRDs independent of Traefik. Other controllers (Cilium, future ex
 - **HTTP-to-HTTPS redirect** — the port 80 entrypoint permanently redirects all requests to port 443
 - **Dashboard enabled** — accessible through an HTTPRoute for validation
 
-**Gateway resource:** Defines an HTTPS listener for `*.catinthehack.ca` on port 443, referencing the wildcard cert Secret. Also defines an HTTP listener on port 80 for the redirect.
-
-**GatewayClass:** Created automatically by the Traefik Helm chart, or defined explicitly if the chart requires it.
+**Gateway and GatewayClass:** Created by the Helm chart with `gateway.enabled: true`. The Gateway name is set explicitly to `traefik-gateway` in Helm values to avoid ambiguity.
 
 ### Smoke Test: Traefik Dashboard
 
@@ -109,8 +108,10 @@ This proves the full chain: local DNS resolution, hostPort routing, TLS terminat
 
 ## Prerequisites
 
-1. **DigitalOcean API token** — create a scoped token with DNS read/write permissions. Encrypt it with SOPS and commit as `secret.enc.yaml`.
+1. **DigitalOcean API token** — create a custom-scoped token with DNS read/write permissions only (not a full-access token). Encrypt it with SOPS and commit as `secret.enc.yaml`.
 2. **`/etc/hosts` entry** — add `192.168.20.100 traefik.catinthehack.ca` to the developer machine for validation. Real DNS resolution (step 8) comes later.
+
+> **Note:** Consider testing with Let's Encrypt staging (`https://acme-staging-v02.api.letsencrypt.org/directory`) first to avoid rate limits during initial setup. Switch to production after confirming the DNS-01 flow works.
 
 ## Roadmap Updates
 

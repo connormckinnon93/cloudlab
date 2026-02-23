@@ -94,7 +94,7 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 |----------|------|---------|
 | ~~Flux repo structure~~ | ~~2~~ | ~~Monorepo~~ (chosen) ~~vs separate GitOps repo~~ |
 | ~~NFS provisioner~~ | ~~4~~ | ~~nfs-subdir-external-provisioner~~ (chosen) ~~vs democratic-csi~~ |
-| Ingress approach | 5 | ingress-nginx, Cilium ingress, or Gateway API directly |
+| ~~Ingress approach~~ | ~~5~~ | ~~Traefik + Gateway API~~ (chosen) |
 | Service domain | 7 | `*.home.arpa`, `*.cloudlab.local`, or a real domain with split-horizon DNS |
 | Auth architecture | 12 | Authelia (lightweight forward-auth) vs Authentik (full OIDC identity provider) |
 | VCS platform | 13 | Gitea vs Forgejo |
@@ -106,8 +106,8 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 2. ~~**Bootstrap Flux** — GitHub repo, CI, GitOps foundation~~
 3. ~~**SOPS + Flux** — Decrypt SOPS-encrypted secrets in-cluster via Flux's kustomize-controller~~
 4. ~~**NFS storage provisioner** — Dynamic PersistentVolumes backed by Synology NAS~~
-5. **Ingress controller** — Route external HTTP/HTTPS traffic to cluster services
-6. **cert-manager** — Automated TLS certificates via Let's Encrypt
+5. ~~**Ingress controller** — Route external HTTP/HTTPS traffic to cluster services~~
+6. ~~**cert-manager** — Automated TLS certificates via Let's Encrypt~~
 7. **Internal DNS** — Resolve friendly service names to the ingress IP
 8. **Monitoring** — Prometheus + Grafana for metrics, dashboards, and cluster health
 
@@ -135,11 +135,11 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 
 23. **Hubble observability** — Cilium's service map and flow visibility via eBPF
 24. **PersistentVolume backups** — Volsync for scheduled PVC replication to NAS
-25. **Cluster dashboard** — Headlamp for visual cluster inspection behind auth
+25. **Cluster-wide backups** — Velero for scheduled backup and restore of all cluster resources
+26. **Cluster dashboard** — Headlamp for visual cluster inspection behind auth
 
 ### Phase 5: Platform Maturity
 
-26. **Gateway API migration** — Move from Ingress resources to HTTPRoute/Gateway
 27. **Image pull-through cache** — Spegel for peer-to-peer registry mirroring on-cluster
 28. **Descheduler** — Evict pods that violate scheduling constraints over time
 
