@@ -9,4 +9,3 @@ resources:
   - helmrelease-loki.yaml
   - helmrelease-alloy.yaml
   - grafana-datasource-loki.yaml
-  - podmonitor-flux.yaml
