@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+> CLAUDE.md explains how to operate on the codebase.
+> See [ARCHITECTURE.md](ARCHITECTURE.md) for what the system is and why it is structured this way.
+
 Terraform project that provisions a single-node TalosOS Kubernetes cluster on Proxmox.
 
 ## Quick Reference
@@ -89,13 +92,6 @@ flux reconcile kustomization flux-system --with-source  # Force reconciliation
 ```
 
 Three validation contexts: lefthook runs a fast subset on pre-commit (terraform fmt, kustomize build, gitleaks). `mise run check` runs the full suite on demand. GitHub Actions runs `mise run check` on every PR and gates merge.
-
-## Platform Notes
-
-- Proxmox host: Lenovo ThinkCentre M710q (i5-7th gen, 32 GB RAM, 512 GB NVMe)
-- TalosOS v1.12.4 (SecureBoot + TPM-sealed LUKS2 encryption), extensions: qemu-guest-agent, nfs-utils
-- VM uses fixed MAC address (`BC:24:11:CA:FE:01`) with DHCP reservation → `192.168.20.100`
-- Synology NAS available at `nas.home` (`192.168.20.20`) for NFS persistent volumes (roadmap step 4)
 
 ## Implementation Notes
 
