@@ -54,6 +54,7 @@ spec:
         accessMode: ReadWriteOnce
         size: 2Gi
     config: |
+      schema_version: 29
       http:
         address: 0.0.0.0:3000
       users:
@@ -67,6 +68,7 @@ spec:
           - unbound.adguard.svc.cluster.local
         bootstrap_dns:
           - 10.96.0.10
+      filtering:
         rewrites:
           - domain: "*.catinthehack.ca"
             answer: 192.168.20.100
