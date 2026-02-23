@@ -31,7 +31,7 @@ mise run flux:sops-key    # Load age key into cluster for SOPS decryption
 
 | File | Purpose |
 |------|---------|
-| `.mise.toml` | Tool versions (terraform, talosctl, sops, age, kubectl, tflint, lefthook) and tasks |
+| `.mise.toml` | Tool versions (terraform, talosctl, sops, age, kubectl, tflint, lefthook, gitleaks, kustomize, kubeconform, flux2, helm) and tasks |
 | `.sops.yaml` | SOPS encryption rules — age key, file patterns |
 | `terraform/versions.tf` | Required providers and version constraints |
 | `terraform/variables.tf` | Variable declarations for VM and cluster config |
@@ -57,6 +57,7 @@ mise run flux:sops-key    # Load age key into cluster for SOPS decryption
 | `kubernetes/infrastructure/gateway-api/` | Gateway API CRDs (upstream GitRepository, commit-pinned) |
 | `kubernetes/infrastructure/cert-manager/` | cert-manager with DNS-01 via DigitalOcean |
 | `kubernetes/infrastructure/traefik/` | Traefik ingress with Gateway API, wildcard TLS |
+| `kubernetes/infrastructure/adguard/` | AdGuard Home DNS + Unbound recursive resolver |
 | `kubernetes/infrastructure/monitoring/` | Observability stack — kube-prometheus-stack, Loki, Alloy, alerting |
 
 ## Providers
@@ -115,6 +116,10 @@ Three validation contexts: lefthook runs a fast subset on pre-commit (terraform 
 - **Traefik chart v38 redirect syntax**: The `redirectTo` property was removed from the values schema. Use `redirections.entryPoint.to` instead (see `ports.web.redirections` in helmrelease.yaml).
 - **Cross-namespace HTTPRoute**: Routes in app namespaces reference the Gateway with `parentRefs: [{name: traefik-gateway, namespace: traefik}]`. The Gateway permits this via `namespacePolicy.from: All`. Each app needs its own subdomain under `*.catinthehack.ca` — the wildcard cert covers all of them.
 - **App deployment pattern**: The whoami app (`kubernetes/apps/whoami/`) is the template for future services: namespace, Deployment, Service, HTTPRoute, and a Kustomize entry point. Register each app directory in `kubernetes/apps/kustomization.yaml`.
+- **AdGuard Home DNS**: Network DNS server with ad-blocking and DNS rewrite (`*.catinthehack.ca -> 192.168.20.100`). Uses `hostNetwork: true` to bind port 53 on the node IP and `dnsPolicy: ClusterFirstWithHostNet` to route the pod's DNS through CoreDNS instead of the node's resolver. The `adguard` namespace requires `privileged` PSA, same as `traefik`.
+- **Unbound recursive resolver**: AdGuard Home's sole upstream. Queries root nameservers directly; no third-party forwarders. ClusterIP service only — not exposed outside the cluster. DNSSEC validation enabled.
+- **AdGuard Home config seeding**: The gabe565 Helm chart generates a ConfigMap from the `config` values key and copies it to the config PVC on first boot only; subsequent restarts preserve UI changes. Flux injects the admin password (bcrypt hash) via `valuesFrom` from a SOPS-encrypted Secret, deep-merged into chart values before Helm renders the config.
+- **DNS circular dependency avoidance**: AdGuard Home runs on `hostNetwork` with `ClusterFirstWithHostNet` DNS policy. The pod resolves `unbound.adguard.svc.cluster.local` via CoreDNS, which forwards non-cluster queries to TalosOS Host DNS. TalosOS Host DNS uses `machine.network.nameservers` (static, set in Terraform) rather than DHCP-acquired DNS — this breaks the loop when router DHCP points at AdGuard Home. **Prerequisite:** `machine.network.nameservers` must be set to external resolvers (e.g., `1.1.1.1`, `8.8.8.8`) before changing router DHCP, or a node restart will deadlock.
 - **Observability namespace**: All monitoring components (Prometheus, Grafana, Alertmanager, Loki, Alloy) share the `monitoring` namespace in a single `kubernetes/infrastructure/monitoring/` directory. This deviates from the one-namespace-per-component pattern — these components form a tightly coupled system with shared HelmRepositories and cross-references.
 - **Grafana datasource auto-discovery**: kube-prometheus-stack's Grafana sidecar watches for ConfigMaps labeled `grafana_datasource: "1"` in the monitoring namespace. Loki registers via this mechanism (`grafana-datasource-loki.yaml`).
 - **Alertmanager Pushover credentials**: Mounted from the `monitoring-secrets` Secret via `alertmanager.alertmanagerSpec.secrets` in kube-prometheus-stack values. Credentials read from files at `/etc/alertmanager/secrets/monitoring-secrets/`. Edit with `mise run sops:edit kubernetes/infrastructure/monitoring/secret.enc.yaml`.

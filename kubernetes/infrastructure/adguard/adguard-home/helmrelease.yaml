@@ -1,0 +1,77 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: adguard-home
+  namespace: adguard
+spec:
+  interval: 30m
+  timeout: 5m
+  chart:
+    spec:
+      chart: adguard-home
+      version: "0.3.25"
+      interval: 60m
+      sourceRef:
+        kind: HelmRepository
+        name: gabe565
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  valuesFrom:
+    - kind: Secret
+      name: adguard-home-values
+      valuesKey: values.yaml
+  values:
+    hostNetwork: true
+    dnsPolicy: ClusterFirstWithHostNet
+    service:
+      dns-tcp:
+        enabled: true
+        type: ClusterIP
+        annotations: {}
+        ports:
+          dns-tcp:
+            enabled: true
+            port: 53
+          dns-over-tls:
+            enabled: false
+      dns-udp:
+        enabled: true
+        type: ClusterIP
+        annotations: {}
+        ports:
+          dns-udp:
+            enabled: true
+            protocol: UDP
+            port: 53
+          dns-over-quic:
+            enabled: false
+    persistence:
+      config:
+        enabled: true
+        storageClass: nfs
+        accessMode: ReadWriteOnce
+        size: 1Gi
+      data:
+        enabled: true
+        storageClass: nfs
+        accessMode: ReadWriteOnce
+        size: 2Gi
+    config:
+      dns:
+        upstream_dns:
+          - unbound.adguard.svc.cluster.local
+        bootstrap_dns: []
+        rewrites:
+          - domain: "*.catinthehack.ca"
+            answer: 192.168.20.100
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
