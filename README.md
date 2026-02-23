@@ -48,6 +48,7 @@ mise run tf plan                     # Preview changes
 mise run tf apply                    # Provision and bootstrap
 mise run config:export               # Encrypt outputs
 mise run config:decrypt              # Decrypt configs for local use
+mise run flux:sops-key               # Load age key for SOPS decryption
 kubectl get nodes                    # Verify
 ```
 
@@ -103,7 +104,7 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 
 1. ~~**SecureBoot + disk encryption** — EFI SecureBoot, virtual TPM, LUKS2 on STATE and EPHEMERAL partitions~~
 2. ~~**Bootstrap Flux** — GitHub repo, CI, GitOps foundation~~
-3. **SOPS + Flux** — Decrypt SOPS-encrypted secrets in-cluster via Flux's kustomize-controller
+3. ~~**SOPS + Flux** — Decrypt SOPS-encrypted secrets in-cluster via Flux's kustomize-controller~~
 4. **NFS storage provisioner** — Dynamic PersistentVolumes backed by Synology NAS
 5. **Ingress controller** — Route external HTTP/HTTPS traffic to cluster services
 6. **cert-manager** — Automated TLS certificates via Let's Encrypt
