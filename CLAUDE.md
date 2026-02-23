@@ -17,6 +17,8 @@ mise run config:decrypt   # Decrypt configs for local use
 mise run check            # Run all validators: tf fmt, validate, lint, kustomize, kubeconform, gitleaks
 mise run sops:edit        # Edit encrypted secrets (defaults to secrets.enc.json)
 mise run flux:sops-key    # Load age key into cluster for SOPS decryption
+mise run dns:set          # Point local DNS at AdGuard Home (192.168.20.100)
+mise run dns:unset        # Revert local DNS to DHCP defaults
 ```
 
 ## Repository Structure
@@ -160,6 +162,8 @@ Three test tiers: static (`mise run check` — terraform test, kyverno CLI, kube
 - **Authentik managed outpost**: Authentik's Kubernetes integration auto-deploys the proxy outpost (Deployment, Service, Secret) via the `service_connection` field in the outpost blueprint pointing to `Local Kubernetes Cluster`. Managed outposts use `ak-outpost-{name}` naming (e.g., `ak-outpost-traefik-outpost`). Connects to Authentik server via in-cluster service name (`http://authentik-server.authentik.svc:80`) configured in the outpost blueprint's `authentik_host`. The outpost HTTPRoute remains manually managed because Authentik's `kubernetes_httproute_annotations` setting cannot set labels — the Kyverno forward-auth skip requires label `auth.catinthehack.ca/skip: "true"`, not an annotation.
 - **Kyverno forward-auth injection**: ClusterPolicy `inject-authentik-forward-auth` has two rules. The `generate` rule creates a ForwardAuth Middleware in each app namespace (`generateExisting: true`, `synchronize: true`). The `mutate` rule injects an `ExtensionRef` filter into every HTTPRoute rule pointing to that Middleware. The `traefik.io/middleware` annotation does NOT work with Gateway API — only `ExtensionRef` filters do. Kyverno requires RBAC for `traefik.io/v1alpha1/Middleware` (admission-controller: get/list; background-controller: full CRUD), configured via `rbac.clusterRole.extraResources` in the Kyverno HelmRelease. Opt out with label `auth.catinthehack.ca/skip: "true"`.
 - **Bitnami Helm charts frozen**: Docker Hub OCI registry (`oci://registry-1.docker.io/bitnamicharts`) stopped receiving updates August 2025. Container images also frozen. Use alternative charts (CloudNativePG for PostgreSQL) or pin to last available versions with image overrides.
+
+- **Local DNS tasks**: `dns:set` and `dns:unset` configure macOS DNS on Ethernet, USB LAN, and Wi-Fi interfaces. Requires AdGuard Home running at `192.168.20.100`. Use `dns:unset` to revert to DHCP if DNS breaks. Both tasks print verification output after applying changes.
 
 ## Deployment Lessons
 
