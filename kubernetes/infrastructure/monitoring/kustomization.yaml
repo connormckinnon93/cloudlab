@@ -10,7 +10,3 @@ resources:
   - helmrelease-alloy.yaml
   - grafana-datasource-loki.yaml
   - podmonitor-flux.yaml
-  - httproute-grafana.yaml
-  - httproute-prometheus.yaml
-  - httproute-alertmanager.yaml
-  - httproute-alloy.yaml

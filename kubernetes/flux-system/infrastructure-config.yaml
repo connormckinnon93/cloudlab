@@ -1,7 +1,7 @@
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: apps
+  name: infrastructure-config
   namespace: flux-system
 spec:
   interval: 10m
@@ -9,15 +9,9 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  path: ./kubernetes/apps
+  path: ./kubernetes/infrastructure-config
   prune: true
   wait: true
   timeout: 5m
-  # Depends on cluster-policies so that policy enforcement is active before
-  # app workloads are reconciled.
   dependsOn:
-    - name: cluster-policies
-  decryption:
-    provider: sops
-    secretRef:
-      name: sops-age
+    - name: infrastructure
