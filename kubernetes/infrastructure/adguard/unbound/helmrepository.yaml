@@ -1,0 +1,8 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: unbound
+  namespace: adguard
+spec:
+  interval: 60m
+  url: https://pixelfederation.github.io/unbound

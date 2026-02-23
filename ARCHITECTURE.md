@@ -40,15 +40,23 @@ The DHCP-then-static IP transition matters: config apply uses the DHCP address, 
 
 ## Flux GitOps
 
-Flux reconciles four Kustomization layers in a linear dependency chain:
+Flux reconciles five Kustomization layers:
 
 ```
-flux-system -> infrastructure -> cluster-policies -> apps
+flux-system -> infrastructure -> infrastructure-config
+                              -> cluster-policies -> apps
 ```
 
-### Why three layers after flux-system?
+(infrastructure-config and cluster-policies both depend on infrastructure and reconcile in parallel)
 
-Flux's server-side dry-run rejects CRD-based resources (like Kyverno ClusterPolicy) before the HelmRelease that installs those CRDs has run. Policies must wait in a separate layer until infrastructure finishes installing CRDs.
+### Why four layers after flux-system?
+
+Flux's server-side dry-run rejects resources whose CRDs do not yet exist. Two categories of resources need separate layers:
+
+- **infrastructure-config**: CRD-dependent resources (ClusterIssuer, Certificate, HTTPRoutes) that would deadlock infrastructure's dry-run if bundled with the HelmReleases that install those CRDs.
+- **cluster-policies**: Kyverno ClusterPolicy resources that depend on Kyverno CRDs installed by infrastructure.
+
+Both layers depend on infrastructure and reconcile in parallel.
 
 ### Infrastructure components
 
@@ -59,6 +67,8 @@ Flux's server-side dry-run rejects CRD-based resources (like Kyverno ClusterPoli
 | Traefik | Ingress controller with Gateway API, hostPort binding on 80/443 |
 | NFS provisioner | Dynamic PersistentVolumes from Synology NAS |
 | Kyverno | Policy engine for image signature verification (audit mode) |
+| Monitoring | Prometheus, Grafana, Alertmanager, Loki, Alloy for observability |
+| AdGuard Home | DNS server with ad-blocking, backed by Unbound recursive resolver |
 
 ### Cluster policies
 
@@ -72,7 +82,7 @@ Each app follows the pattern: namespace, Deployment, Service, HTTPRoute, Kustomi
 
 Traefik binds to host ports 80 and 443 (no LoadBalancer needed on a single node). HTTP redirects to HTTPS at the entrypoint level.
 
-cert-manager manages a wildcard Certificate for `*.catinthehack.ca`. The Certificate resource lives in the traefik directory and targets the traefik namespace so the TLS Secret is co-located with the Gateway. The ClusterIssuer uses DigitalOcean DNS-01 challenges.
+cert-manager manages a wildcard Certificate for `*.catinthehack.ca`. The Certificate resource lives in `infrastructure-config/` and targets the traefik namespace so the TLS Secret is co-located with the Gateway. The ClusterIssuer uses DigitalOcean DNS-01 challenges.
 
 HTTPRoutes in app namespaces reference the Gateway with:
 
@@ -96,15 +106,9 @@ Flux's kustomize-controller decrypts SOPS resources at reconciliation time.
 
 ## Bootstrap (First Deploy)
 
-On a fresh cluster, Flux's server-side dry-run rejects cert-manager Certificate and ClusterIssuer resources because the CRDs do not exist yet. This deadlocks the entire infrastructure Kustomization.
+The infrastructure-config Kustomization layer prevents CRD bootstrapping deadlocks. CRD-dependent resources (ClusterIssuer, Certificate, HTTPRoutes) live in a separate Flux Kustomization that waits for infrastructure to finish installing CRDs before dry-run checking.
 
-**Fix (one-time):**
-
-1. `kubectl apply` the cert-manager HelmRepository and HelmRelease manually
-2. Wait for cert-manager CRDs to install
-3. Flux reconciles the rest automatically
-
-Re-run `mise run flux:sops-key` after any cluster rebuild to restore the SOPS decryption key.
+After any cluster rebuild, re-run `mise run flux:sops-key` to restore the SOPS decryption key.
 
 ## Validation
 
