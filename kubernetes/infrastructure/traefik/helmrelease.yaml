@@ -44,14 +44,8 @@ spec:
             - name: wildcard-catinthehack-ca-tls
           namespacePolicy:
             from: All
-    ingressRoute:
-      dashboard:
-        enabled: false
-    api:
-      dashboard: true
     ports:
       web:
-        port: 8000
         hostPort: 80
         redirections:
           entryPoint:
@@ -59,7 +53,6 @@ spec:
             scheme: https
             permanent: true
       websecure:
-        port: 8443
         hostPort: 443
     service:
       type: ClusterIP

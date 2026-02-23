@@ -30,22 +30,16 @@ spec:
     dnsPolicy: ClusterFirstWithHostNet
     service:
       dns-tcp:
-        enabled: true
         type: ClusterIP
-        annotations: {}
         ports:
           dns-tcp:
-            enabled: true
             port: 53
           dns-over-tls:
             enabled: false
       dns-udp:
-        enabled: true
         type: ClusterIP
-        annotations: {}
         ports:
           dns-udp:
-            enabled: true
             protocol: UDP
             port: 53
           dns-over-quic:
