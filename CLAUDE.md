@@ -125,3 +125,21 @@ Three validation contexts: lefthook runs a fast subset on pre-commit (terraform 
 - **Loki retention**: Requires both `limits_config.retention_period` and `compactor.retention_enabled: true`. Without the compactor flag, expired data is never deleted.
 - **Exposed UIs without auth**: Grafana has built-in login. Prometheus, Alertmanager, and Alloy have no authentication — first candidates for the auth gateway (step 12).
 - **flux-system/kustomization.yaml manual additions**: Contains custom resources (infrastructure.yaml, apps.yaml, cluster-policies.yaml, provider-alertmanager.yaml, alert-flux.yaml) that must be re-added after `flux bootstrap` operations.
+
+## Deployment Lessons
+
+Patterns learned from building this project that apply to all future work.
+
+### Git workflow
+- **Main is protected.** All changes require a PR with passing CI. Never commit directly to main.
+- **Merge, never rebase** when a feature branch falls behind main. Rebase rewrites history and requires force push. `git merge origin/main --no-edit` keeps a clean push.
+- **Commit design docs on the feature branch**, not main. Committing to main before branching causes divergence that must be resolved after the PR merges.
+
+### SOPS secrets
+- **Create secrets with placeholder values**, encrypt them, and commit. Document what the user must fill in and how (`mise run sops:edit <path>`). This lets CI validate the resource structure while real credentials arrive later.
+- **Collect credentials before starting implementation.** Asking mid-flow interrupts momentum. List prerequisites (accounts to create, keys to generate) in the plan and resolve them first.
+
+### Infrastructure-as-code
+- **Pin exact Helm chart versions at implementation time.** Plans should specify major version ranges (e.g., `82.x`). The implementing agent looks up the latest patch version when writing the HelmRelease.
+- **Tightly coupled components belong in one directory.** The observability stack shares a namespace, HelmRepositories, and cross-references. Splitting into separate directories creates hidden dependencies. One directory with prefixed filenames (`helmrelease-loki.yaml`, `helmrelease-alloy.yaml`) keeps everything self-contained.
+- **Review Helm chart values against upstream docs before implementation.** A four-agent review caught 21 issues — duplicate YAML keys, wrong nesting paths, missing required flags. These would have silently broken deployment with no validation error.
