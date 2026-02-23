@@ -1,0 +1,237 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authentik-blueprints
+  namespace: authentik
+data:
+  01-authentication-flow.yaml: |
+    version: 1
+    metadata:
+      name: Authentication Flow
+    entries:
+      - model: authentik_flows.flow
+        id: auth-flow
+        identifiers:
+          slug: default-authentication
+        attrs:
+          name: Authentication
+          designation: authentication
+          authentication: require_unauthenticated
+
+      - model: authentik_stages_identification.identificationstage
+        id: auth-identification
+        identifiers:
+          name: authentication-identification
+        attrs:
+          user_fields:
+            - username
+            - email
+
+      - model: authentik_stages_password.passwordstage
+        id: auth-password
+        identifiers:
+          name: authentication-password
+        attrs:
+          backends:
+            - authentik.core.auth.InbuiltBackend
+
+      - model: authentik_stages_authenticator_validate.authenticatorvalidatestage
+        id: auth-mfa
+        identifiers:
+          name: authentication-mfa
+        attrs:
+          device_classes:
+            - totp
+            - webauthn
+          not_configured_action: skip
+
+      - model: authentik_stages_user_login.userloginstage
+        id: auth-login
+        identifiers:
+          name: authentication-login
+        attrs:
+          session_duration: hours=24
+
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf auth-flow
+          stage: !KeyOf auth-identification
+        attrs:
+          order: 10
+
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf auth-flow
+          stage: !KeyOf auth-password
+        attrs:
+          order: 20
+
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf auth-flow
+          stage: !KeyOf auth-mfa
+        attrs:
+          order: 30
+
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf auth-flow
+          stage: !KeyOf auth-login
+        attrs:
+          order: 40
+
+  02-enrollment-flow.yaml: |
+    version: 1
+    metadata:
+      name: Enrollment Flow
+    entries:
+      - model: authentik_core.group
+        id: users-group
+        identifiers:
+          name: users
+        attrs:
+          name: users
+
+      - model: authentik_flows.flow
+        id: enrollment-flow
+        identifiers:
+          slug: default-enrollment
+        attrs:
+          name: Enrollment
+          designation: enrollment
+          compatibility_mode: true
+
+      - model: authentik_stages_prompt.prompt
+        id: prompt-username
+        identifiers:
+          field_key: username
+        attrs:
+          label: Username
+          type: username
+          required: true
+          order: 0
+          placeholder: Username
+          placeholder_expression: false
+
+      - model: authentik_stages_prompt.prompt
+        id: prompt-email
+        identifiers:
+          field_key: email
+        attrs:
+          label: Email
+          type: email
+          required: true
+          order: 1
+          placeholder: Email
+          placeholder_expression: false
+
+      - model: authentik_stages_prompt.prompt
+        id: prompt-password
+        identifiers:
+          field_key: password
+        attrs:
+          label: Password
+          type: password
+          required: true
+          order: 2
+          placeholder: Password
+          placeholder_expression: false
+
+      - model: authentik_stages_prompt.prompt
+        id: prompt-password-repeat
+        identifiers:
+          field_key: password_repeat
+        attrs:
+          label: Password (repeat)
+          type: password
+          required: true
+          order: 3
+          placeholder: Password (repeat)
+          placeholder_expression: false
+
+      - model: authentik_stages_prompt.promptstage
+        id: enrollment-prompt
+        identifiers:
+          name: enrollment-prompt
+        attrs:
+          fields:
+            - !KeyOf prompt-username
+            - !KeyOf prompt-email
+            - !KeyOf prompt-password
+            - !KeyOf prompt-password-repeat
+
+      - model: authentik_stages_user_write.userwritestage
+        id: enrollment-user-write
+        identifiers:
+          name: enrollment-user-write
+        attrs:
+          create_users_as_inactive: false
+          create_users_group: !KeyOf users-group
+
+      - model: authentik_stages_user_login.userloginstage
+        id: enrollment-login
+        identifiers:
+          name: enrollment-login
+        attrs:
+          session_duration: hours=24
+
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf enrollment-flow
+          stage: !KeyOf enrollment-prompt
+        attrs:
+          order: 10
+
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf enrollment-flow
+          stage: !KeyOf enrollment-user-write
+        attrs:
+          order: 20
+
+      - model: authentik_flows.flowstagebinding
+        identifiers:
+          target: !KeyOf enrollment-flow
+          stage: !KeyOf enrollment-login
+        attrs:
+          order: 30
+
+  03-forward-auth-provider.yaml: |
+    version: 1
+    metadata:
+      name: Forward Auth Provider
+    entries:
+      - model: authentik_providers_proxy.proxyprovider
+        id: forward-auth-provider
+        identifiers:
+          name: traefik-forward-auth
+        attrs:
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-authentication]]
+          mode: forward_domain
+          external_host: https://auth.catinthehack.ca
+          cookie_domain: catinthehack.ca
+          access_token_validity: hours=24
+
+      - model: authentik_core.application
+        identifiers:
+          slug: traefik-forward-auth
+        attrs:
+          name: Cluster Services
+          provider: !KeyOf forward-auth-provider
+          meta_launch_url: "blank://blank"
+
+  04-proxy-outpost.yaml: |
+    version: 1
+    metadata:
+      name: Proxy Outpost
+    entries:
+      - model: authentik_outposts.outpost
+        identifiers:
+          name: traefik-outpost
+        attrs:
+          type: proxy
+          providers:
+            - !Find [authentik_providers_proxy.proxyprovider, [name, traefik-forward-auth]]
+          config:
+            authentik_host: https://auth.catinthehack.ca
+            kubernetes_disabled: true

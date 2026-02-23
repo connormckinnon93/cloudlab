@@ -61,6 +61,10 @@ mise run flux:sops-key    # Load age key into cluster for SOPS decryption
 | `kubernetes/infrastructure/traefik/` | Traefik ingress with Gateway API, wildcard TLS |
 | `kubernetes/infrastructure/adguard/` | AdGuard Home DNS + Unbound recursive resolver |
 | `kubernetes/infrastructure/monitoring/` | Observability stack — kube-prometheus-stack, Loki, Alloy, alerting |
+| `kubernetes/infrastructure/cloudnative-pg/` | CloudNativePG operator (shared PostgreSQL infrastructure) |
+| `kubernetes/infrastructure/postgres/` | PostgreSQL cluster instance via CloudNativePG |
+| `kubernetes/infrastructure/authentik/` | Authentik identity provider, proxy outpost, forward-auth middleware |
+| `kubernetes/cluster-policies/clusterpolicy-inject-forward-auth.yaml` | Kyverno policy: auto-inject forward-auth on all HTTPRoutes |
 
 ## Providers
 
@@ -131,8 +135,16 @@ Three validation contexts: lefthook runs a fast subset on pre-commit (terraform 
 - **Flux metrics PodMonitor**: Lives in `monitoring` namespace, targets Flux controller pods in `flux-system` via `namespaceSelector`. Required for the FluxReconciliationFailure custom alert rule.
 - **Loki storage**: Filesystem-backed TSDB in single-binary mode on NFS. Known risk: NFS's weaker fsync semantics. Fallback: switch to hostPath on local NVMe if corruption occurs.
 - **Loki retention**: Requires both `limits_config.retention_period` and `compactor.retention_enabled: true`. Without the compactor flag, expired data is never deleted.
-- **Exposed UIs without auth**: Grafana has built-in login. Prometheus, Alertmanager, and Alloy have no authentication — first candidates for the auth gateway (step 12).
+- **Exposed UIs without auth**: Grafana has built-in login. Prometheus, Alertmanager, and Alloy have no authentication — protected by the Authentik forward-auth gateway.
 - **flux-system/kustomization.yaml manual additions**: Contains custom resources (infrastructure.yaml, infrastructure-config.yaml, apps.yaml, cluster-policies.yaml, provider-alertmanager.yaml, alert-flux.yaml) that must be re-added after `flux bootstrap` operations.
+- **CloudNativePG operator**: Runs in `cnpg-system` namespace, installs Cluster, Backup, ScheduledBackup, Pooler, and Database CRDs. Manages PostgreSQL instances across all namespaces.
+- **Shared PostgreSQL**: CloudNativePG cluster in `postgres` namespace. Single instance on NFS. Same fsync risk as Loki — fallback to hostPath on local NVMe if corruption occurs. Services: `postgres-cluster-rw.postgres.svc` (read-write), `postgres-cluster-ro.postgres.svc` (read-only). Future services (Gitea, Infisical) add databases via the `Database` CRD or by updating the cluster chart values with additional `roles` entries.
+- **Authentik existingSecret**: All credentials stored in a single SOPS-encrypted Secret (`authentik-secrets`). The chart reads `AUTHENTIK_*` environment variables from this Secret via `existingSecret.secretName`. No inline values in HelmRelease.
+- **Authentik blueprints**: Mounted via `blueprints.configMaps` in HelmRelease values. Chart mounts at `/blueprints/mounted/cm-{name}/`, not `/blueprints/custom/`. Only the worker pod processes blueprints. Files numbered (`01-`, `02-`) for processing order.
+- **Authentik removed Redis**: As of v2025.10, PostgreSQL handles caching, sessions, and task queuing. No Redis configuration exists in the chart or application. Redis deployment deferred until a future service requires it.
+- **Proxy outpost**: Manual Deployment using `ghcr.io/goauthentik/proxy:{version}`. Pin image tag to match Authentik server version. Connects to Authentik via `AUTHENTIK_HOST` (external URL) with `AUTHENTIK_INSECURE=true` for in-cluster hairpin routing. `AUTHENTIK_TOKEN` must match `AUTHENTIK_BOOTSTRAP_TOKEN`.
+- **Kyverno forward-auth mutation**: ClusterPolicy `inject-authentik-forward-auth` adds `traefik.io/middleware` annotation to all HTTPRoutes via mutating admission webhook. Fires before SSA processing — no conflict with Flux reconciliation. Opt out with label `auth.catinthehack.ca/skip: "true"`.
+- **Bitnami Helm charts frozen**: Docker Hub OCI registry (`oci://registry-1.docker.io/bitnamicharts`) stopped receiving updates August 2025. Container images also frozen. Use alternative charts (CloudNativePG for PostgreSQL) or pin to last available versions with image overrides.
 
 ## Deployment Lessons
 
@@ -142,6 +154,7 @@ Patterns learned from building this project that apply to all future work.
 - **Main is protected.** All changes require a PR with passing CI. Never commit directly to main.
 - **Merge, never rebase** when a feature branch falls behind main. Rebase rewrites history and requires force push. `git merge origin/main --no-edit` keeps a clean push.
 - **Commit design docs on the feature branch**, not main. Committing to main before branching causes divergence that must be resolved after the PR merges.
+- **Use `gh pr checks <number> --watch` to wait for CI.** Don't poll manually with `sleep` — `--watch` blocks until all checks complete and exits with the correct status code.
 
 ### SOPS secrets
 - **Create secrets with placeholder values**, encrypt them, and commit. Document what the user must fill in and how (`mise run sops:edit <path>`). This lets CI validate the resource structure while real credentials arrive later.
@@ -161,3 +174,12 @@ Patterns learned from building this project that apply to all future work.
 
 ### App deployment pattern
 - **Use `valuesFrom` with SOPS-encrypted Secrets for credentials.** Flux deep-merges Secret values into HelmRelease values before Helm renders templates. Store only the sensitive subset (e.g., bcrypt password hash) in the Secret; keep all other config in the HelmRelease values block.
+
+### Identity and auth
+- **Verify upstream project changes before planning.** Authentik removed Redis in v2025.10 — the design assumed Redis was still required. Always check release notes for the target version. Stale assumptions create unnecessary infrastructure.
+- **Prefer `existingSecret` over inline credentials.** Authentik's `existingSecret.secretName` loads all `AUTHENTIK_*` environment variables from one Secret. Simpler than `valuesFrom` deep-merge when the chart supports it natively.
+- **Use `forward_domain` mode, not `forward_single`.** `forward_domain` shares a single auth cookie across all subdomains (`cookie_domain: catinthehack.ca`). `forward_single` requires a separate provider per subdomain.
+- **Separate operator from instance.** CloudNativePG operator (`cnpg-system`) installs CRDs; the PostgreSQL cluster (`postgres`) is a separate HelmRelease with `dependsOn`. This pattern avoids CRD race conditions and allows multiple clusters from one operator.
+- **Place CRD-dependent middleware in `cluster-policies/`.** The Traefik ForwardAuth Middleware uses `traefik.io/v1alpha1` — a CRD installed by Traefik's HelmRelease. Placing the Middleware in `infrastructure/` deadlocks Flux's server-side dry-run. The `cluster-policies` layer depends on `infrastructure`, so CRDs exist before the Middleware is applied.
+- **Blueprint cross-file references use `!Find`, not `!KeyOf`.** Within a single blueprint file, `!KeyOf` resolves by local `id` field. Across files (e.g., blueprint 03 referencing a flow from 01), `!Find` performs a database lookup by identifier. Wrong reference type silently fails.
+- **Bitnami charts are frozen — plan alternatives.** Docker Hub OCI registry stopped publishing Bitnami charts and images in August 2025. CloudNativePG replaces Bitnami PostgreSQL. Future services needing Redis should evaluate alternatives (Dragonfly, KeyDB, or upstream Redis charts).

@@ -12,7 +12,7 @@ spec:
   path: ./kubernetes/infrastructure
   prune: true
   wait: true
-  timeout: 5m
+  timeout: 15m
   # First layer after flux-system. Installs CRDs and cluster services
   # that later layers depend on (cert-manager, Kyverno, Traefik, etc.).
   dependsOn:

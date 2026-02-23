@@ -8,3 +8,6 @@ resources:
   - kyverno
   - adguard
   - monitoring
+  - cloudnative-pg
+  - postgres
+  - authentik
