@@ -55,14 +55,6 @@ spec:
         storageClass: nfs
         accessMode: ReadWriteOnce
         size: 2Gi
-    config:
-      dns:
-        upstream_dns:
-          - unbound.adguard.svc.cluster.local
-        bootstrap_dns: []
-        rewrites:
-          - domain: "*.catinthehack.ca"
-            answer: 192.168.20.100
     resources:
       requests:
         cpu: 10m
