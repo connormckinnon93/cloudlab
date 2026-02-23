@@ -81,10 +81,3 @@ spec:
         type: filesystem
     gateway:
       enabled: false
-    minio:
-      enabled: false
-    monitoring:
-      selfMonitoring:
-        enabled: false
-      lokiCanary:
-        enabled: false

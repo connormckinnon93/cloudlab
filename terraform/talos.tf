@@ -1,5 +1,3 @@
-provider "talos" {}
-
 # --- VM IP (for initial connection before static IP is configured) ---
 
 locals {

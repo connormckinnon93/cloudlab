@@ -1,0 +1,16 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: helmreleases-ready
+spec:
+  steps:
+  - try:
+    - script:
+        content: |
+          not_ready=$(kubectl get helmreleases -A -o json | jq -r '.items[] | select(.status.conditions[]? | select(.type=="Ready" and .status!="True")) | "\(.metadata.namespace)/\(.metadata.name)"')
+          if [ -n "$not_ready" ]; then
+            echo "HelmReleases not ready:"
+            echo "$not_ready"
+            exit 1
+          fi
+          echo "All HelmReleases are Ready"

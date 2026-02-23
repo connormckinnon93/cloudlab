@@ -81,6 +81,11 @@ Secrets are encrypted with SOPS (age backend) and stored in git. The SOPS Terraf
 | tflint | Terraform linting |
 | lefthook | Git pre-commit hooks |
 | Mise | Tool version management and task runner |
+| Kyverno CLI | Policy testing (offline) |
+| Chainsaw | E2E tests against live cluster |
+| Trivy | Security misconfiguration scanning |
+| Pluto | Deprecated API detection |
+| kube-linter | Kubernetes best-practice linting |
 
 ## Roadmap
 
@@ -96,7 +101,7 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 | ~~NFS provisioner~~ | ~~4~~ | ~~nfs-subdir-external-provisioner~~ (chosen) ~~vs democratic-csi~~ |
 | ~~Ingress approach~~ | ~~5~~ | ~~Traefik + Gateway API~~ (chosen) |
 | ~~Service domain~~ | ~~7~~ | ~~`*.home.arpa`, `*.cloudlab.local`, or a real domain with split-horizon DNS~~ — `*.catinthehack.ca` with AdGuard Home DNS rewrite (chosen) |
-| Auth architecture | 12 | Authelia (lightweight forward-auth) vs Authentik (full OIDC identity provider) |
+| ~~Auth architecture~~ | ~~12~~ | ~~Authentik~~ (chosen) |
 | VCS platform | 13 | Gitea vs Forgejo |
 | Secrets manager | 15 | Infisical self-hosted vs other |
 
@@ -116,7 +121,7 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 9. ~~**Log aggregation** — Loki + Alloy for centralized container logs alongside Prometheus metrics~~
 10. ~~**Alerting** — Alertmanager with Pushover notifications for critical and warning alerts~~
 11. ~~**Kyverno** — Image signature verification first, general policies later~~
-12. **Authentication gateway** — Single sign-on and 2FA in front of all services
+12. ~~**Authentication gateway** — Single sign-on and 2FA in front of all services~~
 13. **Gitea/Forgejo** — First self-hosted app; migrate Flux source from GitHub
 14. **Renovate** — Automated dependency updates (against Gitea)
 15. **Infisical** — Self-hosted secrets management; begin migrating from SOPS

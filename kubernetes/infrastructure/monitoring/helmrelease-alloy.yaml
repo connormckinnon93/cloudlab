@@ -26,7 +26,6 @@ spec:
   values:
     alloy:
       configMap:
-        create: true
         content: |
           // Discover Kubernetes pods on this node
           discovery.kubernetes "pods" {
@@ -95,13 +94,9 @@ spec:
               url = "http://loki.monitoring.svc:3100/loki/api/v1/push"
             }
           }
-      clustering:
-        enabled: false
-    controller:
-      type: daemonset
-    resources:
-      requests:
-        cpu: 20m
-        memory: 128Mi
-      limits:
-        memory: 256Mi
+      resources:
+        requests:
+          cpu: 20m
+          memory: 128Mi
+        limits:
+          memory: 256Mi

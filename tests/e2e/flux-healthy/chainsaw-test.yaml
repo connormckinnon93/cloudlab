@@ -1,0 +1,9 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: flux-healthy
+spec:
+  steps:
+  - try:
+    - assert:
+        file: assert-kustomizations.yaml

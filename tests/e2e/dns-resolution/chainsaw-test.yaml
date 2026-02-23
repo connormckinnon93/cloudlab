@@ -1,0 +1,15 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: dns-resolution
+spec:
+  steps:
+  - try:
+    - script:
+        content: |
+          result=$(dig +short whoami.catinthehack.ca @192.168.20.100)
+          if [ "$result" != "192.168.20.100" ]; then
+            echo "Expected 192.168.20.100, got: $result"
+            exit 1
+          fi
+          echo "DNS resolution OK: whoami.catinthehack.ca -> $result"

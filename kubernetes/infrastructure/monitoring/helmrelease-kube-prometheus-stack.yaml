@@ -58,11 +58,6 @@ spec:
                   - notification-controller
           podMetricsEndpoints:
             - port: http-prom
-      thanosService:
-        enabled: false
-      thanosServiceMonitor:
-        enabled: false
-
     additionalPrometheusRulesMap:
       flux-rules:
         groups:
@@ -109,16 +104,11 @@ spec:
         secrets:
           - monitoring-secrets
       config:
-        global:
-          resolve_timeout: 5m
         route:
           receiver: pushover-warning
           group_by:
             - alertname
             - namespace
-          group_wait: 30s
-          group_interval: 5m
-          repeat_interval: 12h
           routes:
             - receiver: "null"
               matchers:
@@ -157,9 +147,6 @@ spec:
         enabled: true
         storageClassName: nfs
         size: 1Gi
-      sidecar:
-        datasources:
-          enabled: true
       resources:
         requests:
           cpu: 50m
@@ -167,7 +154,7 @@ spec:
         limits:
           memory: 256Mi
 
-    nodeExporter:
+    prometheus-node-exporter:
       resources:
         requests:
           cpu: 10m

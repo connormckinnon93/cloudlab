@@ -69,10 +69,18 @@ Both layers depend on infrastructure and reconcile in parallel.
 | Kyverno | Policy engine for image signature verification (audit mode) |
 | Monitoring | Prometheus, Grafana, Alertmanager, Loki, Alloy for observability |
 | AdGuard Home | DNS server with ad-blocking, backed by Unbound recursive resolver |
+| CloudNativePG | PostgreSQL operator — manages clusters, backups, and failover |
+| PostgreSQL | Shared database instance via CloudNativePG (single instance on NFS) |
+| Authentik | Identity provider with forward-auth proxy outpost for SSO across all services |
 
 ### Cluster policies
 
-Kyverno ClusterPolicy verifies GHCR image signatures (Flux, Kyverno) using Sigstore keyless attestation. Runs in audit mode; violations appear in PolicyReports (`kubectl get policyreport -A`).
+Kyverno ClusterPolicies:
+
+- **Image signature verification** — verifies GHCR image signatures (Flux, Kyverno) using Sigstore keyless attestation. Runs in audit mode; violations appear in PolicyReports (`kubectl get policyreport -A`).
+- **Forward-auth injection** — auto-injects `traefik.io/middleware` annotation on all HTTPRoutes for Authentik forward-auth. Opt out with label `auth.catinthehack.ca/skip: "true"`.
+
+A Traefik ForwardAuth Middleware (`middleware-forward-auth.yaml`) also lives in cluster-policies because it depends on Traefik CRDs installed by infrastructure.
 
 ### Apps
 
@@ -110,14 +118,38 @@ The infrastructure-config Kustomization layer prevents CRD bootstrapping deadloc
 
 After any cluster rebuild, re-run `mise run flux:sops-key` to restore the SOPS decryption key.
 
-## Validation
+## Testing
+
+Three tiers of tests, from fast/offline to slow/live:
+
+| Tier | Command | What it covers |
+|------|---------|----------------|
+| Static | `mise run check` | terraform fmt, validate, tflint, `terraform test`, kyverno CLI tests, kustomize build, kubeconform, gitleaks |
+| Security | `mise run security` | Trivy (misconfig), Pluto (deprecated APIs), kube-linter (best practices) |
+| E2E | `mise run e2e` | Chainsaw tests against live cluster: Flux health, HelmRelease readiness, DNS resolution, TLS certificates, auth gateway |
+
+`mise run test:all` combines static and security tiers. E2E runs separately because it requires a live cluster.
+
+### Terraform tests
+
+Native `terraform test` files in `terraform/tests/`. Variable validation tests check constraint enforcement. Plan-level tests use `override_module` to replace the SOPS secrets module with mock outputs, then assert on planned resource attributes. No apply — tests run without Proxmox or SOPS credentials.
+
+### Kyverno CLI tests
+
+Policy tests in `tests/kyverno/` verify the forward-auth injection ClusterPolicy. Two cases: injection on a standard HTTPRoute, and skip when the opt-out label is present. Runs offline via `kyverno test`.
+
+### Chainsaw E2E tests
+
+Integration tests in `tests/e2e/` run against the live cluster via Chainsaw. Five test cases: Flux controllers healthy, all HelmReleases ready, DNS resolves `*.catinthehack.ca`, wildcard TLS certificate valid, and auth gateway redirects unauthenticated requests.
+
+## Validation Contexts
 
 Three contexts run overlapping checks at different stages:
 
 | Context | Trigger | Scope |
 |---------|---------|-------|
 | lefthook pre-commit | Every commit | terraform fmt, validate, tflint, kustomize build, gitleaks (staged) |
-| `mise run check` | On demand | Full suite: terraform + kubernetes (kubeconform) + gitleaks (full history) |
+| `mise run check` | On demand | Full static suite: terraform + terraform test + kyverno test + kubernetes (kubeconform) + gitleaks |
 | GitHub Actions | Every PR | `mise run check` (gates merge) |
 
 kubeconform requires SOPS metadata to be stripped from kustomize output. An inline awk filter in the `mise run check` task handles this.

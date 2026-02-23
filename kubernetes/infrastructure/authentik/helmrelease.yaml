@@ -29,11 +29,7 @@ spec:
       existingSecret:
         secretName: authentik-secrets
 
-    postgresql:
-      enabled: false
-
     server:
-      replicas: 1
       resources:
         requests:
           cpu: 50m
@@ -42,8 +38,6 @@ spec:
           memory: 512Mi
 
     worker:
-      enabled: true
-      replicas: 1
       resources:
         requests:
           cpu: 25m

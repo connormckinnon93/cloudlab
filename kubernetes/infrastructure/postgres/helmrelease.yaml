@@ -26,9 +26,6 @@ spec:
     remediation:
       retries: 3
   values:
-    type: postgresql
-    mode: standalone
-
     version:
       postgresql: "17.8"
 
@@ -38,9 +35,6 @@ spec:
       storage:
         size: 5Gi
         storageClass: nfs
-
-      walStorage:
-        enabled: false
 
       resources:
         requests:
@@ -68,5 +62,3 @@ spec:
         secret:
           name: cnpg-authentik-credentials
 
-    backups:
-      enabled: false
