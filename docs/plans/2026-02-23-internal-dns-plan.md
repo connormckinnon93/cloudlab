@@ -297,7 +297,7 @@ spec:
 
 **Step 2: Create helmrelease.yaml**
 
-> **Review note — verify during implementation:** Run `helm show values gabe565/adguard-home --version 0.3.25` and confirm the values structure matches. Verify: `defaultPodOptions` path (bjw-s common library), `service` names and port structure, `persistence` field names and mountPaths, `config` mapping to AdGuardHome.yaml.
+> **Review note — verify during implementation:** Run `helm show values gabe565/adguard-home --version 0.3.25` and confirm the values structure matches. The gabe565 chart depends on bjw-s common library v1.5.1 — `hostNetwork` and `dnsPolicy` are root-level fields (not nested under `defaultPodOptions`, which was introduced in common v2.x). Verify: `service` names and port structure, `persistence` field names and mountPaths, `config` mapping to AdGuardHome.yaml.
 
 ```yaml
 # kubernetes/infrastructure/adguard/adguard-home/helmrelease.yaml
@@ -329,9 +329,8 @@ spec:
       name: adguard-home-values
       valuesKey: values.yaml
   values:
-    defaultPodOptions:
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
+    hostNetwork: true
+    dnsPolicy: ClusterFirstWithHostNet
     service:
       dns-tcp:
         enabled: true
@@ -357,12 +356,12 @@ spec:
     persistence:
       config:
         enabled: true
-        storageClass: nfs-client
+        storageClass: nfs
         accessMode: ReadWriteOnce
         size: 1Gi
       data:
         enabled: true
-        storageClass: nfs-client
+        storageClass: nfs
         accessMode: ReadWriteOnce
         size: 2Gi
     config:
@@ -382,11 +381,11 @@ spec:
 ```
 
 Key values:
-- `defaultPodOptions.hostNetwork: true` — binds port 53 on the node IP (`192.168.20.100`)
-- `defaultPodOptions.dnsPolicy: ClusterFirstWithHostNet` — hostNetwork pods default to the node's DNS, which cannot resolve cluster-internal names. This policy routes DNS through CoreDNS, so the pod resolves `unbound.adguard.svc.cluster.local`.
+- `hostNetwork: true` — binds port 53 on the node IP (`192.168.20.100`). Root-level field in bjw-s common library v1.5.1.
+- `dnsPolicy: ClusterFirstWithHostNet` — hostNetwork pods default to the node's DNS, which cannot resolve cluster-internal names. This policy routes DNS through CoreDNS, so the pod resolves `unbound.adguard.svc.cluster.local`.
 - `service.dns-*.type: ClusterIP` — overrides the chart's default LoadBalancer (no MetalLB in this cluster)
 - `service.dns-*.annotations: {}` — clears the chart's default MetalLB annotations
-- `persistence.*.storageClass: nfs-client` — stores data on the Synology NAS via the NFS provisioner
+- `persistence.*.storageClass: nfs` — stores data on the Synology NAS via the NFS provisioner
 - `config.dns.upstream_dns` — forwards queries to Unbound's ClusterIP service for recursive resolution
 - `config.dns.bootstrap_dns: []` — clears the chart's default Quad9 bootstrap DNS; unnecessary because CoreDNS resolves the upstream hostname
 - `config.dns.rewrites` — resolves `*.catinthehack.ca` to the cluster IP
@@ -521,7 +520,7 @@ Add to Implementation Notes:
 - **AdGuard Home DNS**: Network DNS server with ad-blocking and DNS rewrite (`*.catinthehack.ca -> 192.168.20.100`). Uses `hostNetwork: true` to bind port 53 on the node IP and `dnsPolicy: ClusterFirstWithHostNet` to route the pod's DNS through CoreDNS instead of the node's resolver. The `adguard` namespace requires `privileged` PSA, same as `traefik`.
 - **Unbound recursive resolver**: AdGuard Home's sole upstream. Queries root nameservers directly; no third-party forwarders. ClusterIP service only — not exposed outside the cluster. DNSSEC validation enabled.
 - **AdGuard Home config seeding**: The gabe565 Helm chart generates a ConfigMap from the `config` values key and copies it to the config PVC on first boot only; subsequent restarts preserve UI changes. Flux injects the admin password (bcrypt hash) via `valuesFrom` from a SOPS-encrypted Secret, deep-merged into chart values before Helm renders the config.
-- **DNS circular dependency avoidance**: AdGuard Home runs on `hostNetwork` with `ClusterFirstWithHostNet` DNS policy. The pod resolves `unbound.adguard.svc.cluster.local` via CoreDNS, which uses nameservers from the TalosOS machine config (set at bootstrap) rather than the network's DHCP-assigned DNS. Pointing router DHCP at AdGuard Home therefore creates no loop.
+- **DNS circular dependency avoidance**: AdGuard Home runs on `hostNetwork` with `ClusterFirstWithHostNet` DNS policy. The pod resolves `unbound.adguard.svc.cluster.local` via CoreDNS, which forwards non-cluster queries to TalosOS Host DNS. TalosOS Host DNS uses `machine.network.nameservers` (static, set in Terraform) rather than DHCP-acquired DNS — this breaks the loop when router DHCP points at AdGuard Home. **Prerequisite:** `machine.network.nameservers` must be set to external resolvers (e.g., `1.1.1.1`, `8.8.8.8`) before changing router DHCP, or a node restart will deadlock.
 
 **Step 2: Update README.md roadmap**
 
@@ -569,9 +568,11 @@ After all tasks are committed and pushed:
 
 4. **Verify AdGuard Home web UI** — Visit `https://adguard.catinthehack.ca` and log in with the admin credentials.
 
-5. **Router DHCP** — Set primary DNS to `192.168.20.100`, secondary to `1.1.1.1`. Devices pick up the change at their next DHCP renewal (or immediately via `ipconfig /release && ipconfig /renew` on Windows, `sudo dhclient -r && sudo dhclient` on Linux).
+5. **TalosOS static nameservers** — Before changing router DHCP, verify that `machine.network.nameservers` is set in the Talos machine config (e.g., `["1.1.1.1", "8.8.8.8"]`). Without static nameservers, the node acquires DNS from DHCP. After the router points DHCP DNS at `192.168.20.100`, a node restart deadlocks: the node cannot resolve DNS to pull images, the cluster cannot start, and AdGuard cannot start. Static nameservers ensure TalosOS always has a working upstream DNS independent of the in-cluster DNS server.
 
-6. **Troubleshooting** — If DNS resolution fails:
+6. **Router DHCP** — Set primary DNS to `192.168.20.100`, secondary to `1.1.1.1`. Devices pick up the change at their next DHCP renewal (or immediately via `ipconfig /release && ipconfig /renew` on Windows, `sudo dhclient -r && sudo dhclient` on Linux).
+
+7. **Troubleshooting** — If DNS resolution fails:
 
    ```bash
    kubectl logs -n adguard deploy/adguard-home     # Check AdGuard Home logs

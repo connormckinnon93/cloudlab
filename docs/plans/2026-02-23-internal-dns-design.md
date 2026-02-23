@@ -11,7 +11,7 @@ Two components share the `adguard` namespace in the Kubernetes cluster:
 ```
 [Home Network Devices]
         |
-        v  (UDP/TCP 53 via hostPort)
+        v  (UDP/TCP 53 via hostNetwork)
   AdGuard Home
         |
         +--[*.catinthehack.ca]---> 192.168.20.100 (DNS rewrite, instant)
@@ -22,7 +22,7 @@ Two components share the `adguard` namespace in the Kubernetes cluster:
                                  Root nameservers
 ```
 
-**AdGuard Home** binds to port 53 on the node IP via hostPort. A DNS rewrite rule maps `*.catinthehack.ca → 192.168.20.100`. AdGuard also blocks ads and trackers for the entire network. The existing Traefik gateway exposes its web UI at `adguard.catinthehack.ca`.
+**AdGuard Home** binds to port 53 on the node IP via `hostNetwork: true`. A DNS rewrite rule maps `*.catinthehack.ca → 192.168.20.100`. AdGuard also blocks ads and trackers for the entire network. The existing Traefik gateway exposes its web UI at `adguard.catinthehack.ca`.
 
 **Unbound** resolves all other queries recursively, querying root nameservers directly instead of forwarding to a third-party provider. AdGuard Home uses Unbound as its sole upstream. Unbound runs as a ClusterIP service, accessible only within the cluster.
 
@@ -38,7 +38,6 @@ kubernetes/infrastructure/
 │   │   ├── helmrelease.yaml
 │   │   ├── helmrepository.yaml
 │   │   ├── httproute.yaml          # adguard.catinthehack.ca
-│   │   ├── configmap.yaml          # AdGuardHome.yaml seed config
 │   │   └── secret.enc.yaml         # SOPS-encrypted admin password
 │   └── unbound/
 │       ├── kustomization.yaml
@@ -53,31 +52,22 @@ kubernetes/infrastructure/
 
 | Port | Protocol | Exposure | Purpose |
 |------|----------|----------|---------|
-| 53 | UDP+TCP | hostPort | DNS server |
-| 3000 | TCP | hostPort (initial setup), then HTTPRoute | Web UI |
+| 53 | UDP+TCP | hostNetwork | DNS server |
+| 3000 | TCP | HTTPRoute | Web UI |
 
-The `adguard` namespace requires `pod-security.kubernetes.io/enforce: privileged` because TalosOS's baseline PSA forbids hostPort binding without elevated privileges.
+The `adguard` namespace requires `pod-security.kubernetes.io/enforce: privileged` because TalosOS's baseline PSA forbids hostNetwork without elevated privileges.
 
 ### Configuration
 
-A ConfigMap holds the full `AdGuardHome.yaml` with:
+The gabe565 Helm chart generates `AdGuardHome.yaml` from the `config` values key in the HelmRelease. The chart copies the generated config to the config PVC on first boot only; subsequent restarts preserve UI changes. Key settings seeded via HelmRelease values:
 
-- Upstream DNS: `unbound.adguard.svc.cluster.local:53`
+- Upstream DNS: `unbound.adguard.svc.cluster.local`
 - DNS rewrite: `*.catinthehack.ca → 192.168.20.100`
 - Default blocklists (AdGuard DNS filter)
-- Bind addresses and port settings
 
-An init container seeds the config on first boot only:
+The admin password (bcrypt hash) lives in a SOPS-encrypted Secret (`secret.enc.yaml`). Flux injects it via `valuesFrom`, deep-merging the password into `config.users` before Helm renders the config.
 
-```bash
-if [ ! -f /opt/adguardhome/conf/AdGuardHome.yaml ]; then
-  cp /tmp/AdGuardHome.yaml /opt/adguardhome/conf/AdGuardHome.yaml
-fi
-```
-
-The admin password (bcrypt hash) lives in a SOPS-encrypted Secret (`secret.enc.yaml`), injected separately from the ConfigMap, following the same pattern as cert-manager's DigitalOcean API token.
-
-Delete the `conf` PVC and restart the pod to reset to the Git config. Copy the running config and update the ConfigMap to capture UI changes back to Git.
+Delete the `conf` PVC and restart the pod to reset to the Git config. Copy the running config and update the HelmRelease values to capture UI changes back to Git.
 
 ### Persistence
 
@@ -86,7 +76,7 @@ Delete the `conf` PVC and restart the pod to reset to the Git config. Copy the r
 | `/opt/adguardhome/conf` | 1Gi | Config, DNS rewrites, filters |
 | `/opt/adguardhome/work` | 2Gi | Query logs, stats |
 
-Both PVCs use the existing `nfs-client` StorageClass backed by the Synology NAS.
+Both PVCs use the existing `nfs` StorageClass backed by the Synology NAS.
 
 ## Unbound
 
@@ -111,12 +101,13 @@ AdGuard Home retries upstream connections until Unbound is ready, so no explicit
 
 ## Post-Deployment Steps
 
-1. **Router DHCP:** Set primary DNS to `192.168.20.100`, secondary to `1.1.1.1` (fallback if cluster is down)
-2. **Verify DNS:** `dig whoami.catinthehack.ca @192.168.20.100` returns `192.168.20.100`
-3. **Verify Web UI:** Visit `adguard.catinthehack.ca` and log in
+1. **TalosOS static nameservers:** Verify `machine.network.nameservers` is set in the Talos machine config (e.g., `["1.1.1.1", "8.8.8.8"]`). Without static nameservers, the node acquires DNS from DHCP. After the router points DHCP DNS at `192.168.20.100`, a node restart deadlocks: the node cannot resolve DNS to pull images, so the cluster and AdGuard cannot start. This is a Terraform change, not a Kubernetes manifest change.
+2. **Router DHCP:** Set primary DNS to `192.168.20.100`, secondary to `1.1.1.1` (fallback if cluster is down)
+3. **Verify DNS:** `dig whoami.catinthehack.ca @192.168.20.100` returns `192.168.20.100`
+4. **Verify Web UI:** Visit `adguard.catinthehack.ca` and log in
 
 ## Trade-offs
 
 **Cluster dependency:** A cluster outage breaks network DNS. The secondary DNS (`1.1.1.1`) in DHCP provides a fallback, but devices may cache the primary and delay failover. Acceptable for a single-operator homelab.
 
-**Config drift:** AdGuard Home UI changes do not propagate to Git. The operator must manually capture them in the ConfigMap. This trade-off is deliberate: full GitOps would overwrite config on every restart, resetting filter timestamps and forcing re-downloads.
+**Config drift:** AdGuard Home UI changes do not propagate to Git. The operator must manually capture them in the HelmRelease values. This trade-off is deliberate: full GitOps would overwrite config on every restart, resetting filter timestamps and forcing re-downloads.
