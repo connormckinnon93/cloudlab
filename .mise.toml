@@ -152,6 +152,34 @@ arg "<version>" help="TalosOS version to upgrade to"
 """
 run = "talosctl upgrade --image factory.talos.dev/installer-secureboot/${usage_schematic_id?}:${usage_version?} --preserve"
 
+[tasks."dns:set"]
+description = "Point local DNS at AdGuard Home (192.168.20.100)"
+run = """
+set -e
+for iface in "Ethernet" "USB 10/100/1G/2.5G LAN" "Wi-Fi"; do
+  echo "Setting DNS on $iface..."
+  networksetup -setdnsservers "$iface" 192.168.20.100
+done
+echo "DNS updated. Verifying..."
+for iface in "Ethernet" "USB 10/100/1G/2.5G LAN" "Wi-Fi"; do
+  echo "  $iface: $(networksetup -getdnsservers "$iface" 2>&1)"
+done
+"""
+
+[tasks."dns:unset"]
+description = "Revert local DNS to DHCP defaults"
+run = """
+set -e
+for iface in "Ethernet" "USB 10/100/1G/2.5G LAN" "Wi-Fi"; do
+  echo "Clearing DNS on $iface..."
+  networksetup -setdnsservers "$iface" empty
+done
+echo "DNS reverted to DHCP. Verifying..."
+for iface in "Ethernet" "USB 10/100/1G/2.5G LAN" "Wi-Fi"; do
+  echo "  $iface: $(networksetup -getdnsservers "$iface" 2>&1)"
+done
+"""
+
 [tasks."flux:sops-key"]
 description = "Create or rotate the sops-age Secret in flux-system"
 run = """
