@@ -9,3 +9,4 @@ resources:
   - adguard
   - monitoring
   - cloudnative-pg
+  - postgres
