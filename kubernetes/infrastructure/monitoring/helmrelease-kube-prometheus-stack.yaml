@@ -42,6 +42,22 @@ spec:
               resources:
                 requests:
                   storage: 10Gi
+      additionalPodMonitors:
+        - name: flux-system
+          namespaceSelector:
+            matchNames:
+              - flux-system
+          selector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - helm-controller
+                  - source-controller
+                  - kustomize-controller
+                  - notification-controller
+          podMetricsEndpoints:
+            - port: http-prom
       thanosService:
         enabled: false
       thanosServiceMonitor:
