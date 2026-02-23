@@ -4,6 +4,10 @@ module "secrets" {
   source = "./secrets"
 }
 
+# --- Talos ---
+
+provider "talos" {}
+
 # --- Proxmox ---
 
 provider "proxmox" {
