@@ -1,6 +1,9 @@
-# Test module: main.tf resources without the ephemeral sops provider.
-# mock_provider does not support ephemeral resources, so we isolate
-# the Proxmox resources here with a hardcoded fake API token.
+# Proxmox resources without the ephemeral sops provider.
+# mock_provider does not support ephemeral resources, so we replace
+# the sops-derived API token with a hardcoded fake value.
+#
+# SYNC: This file mirrors terraform/main.tf (minus the sops provider).
+# If main.tf changes, update this file to match.
 
 provider "proxmox" {
   endpoint  = var.proxmox_endpoint

@@ -1,5 +1,5 @@
-# Variable validation tests use a helper module containing only variables.tf
-# to avoid the ephemeral sops_file resource, which mock_provider does not support.
+# Variable validation tests use a shared helper module to avoid the ephemeral
+# sops_file resource, which mock_provider does not support.
 
 # Valid configuration plans successfully
 run "valid_config" {

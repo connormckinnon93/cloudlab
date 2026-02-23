@@ -1,4 +1,4 @@
-# Outputs for test assertions against main.tf resources.
+# Outputs for test assertions.
 
 # --- VM attributes ---
 

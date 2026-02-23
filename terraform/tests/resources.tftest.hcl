@@ -1,13 +1,13 @@
 # Resource configuration tests for main.tf
-# Uses a helper module to isolate Proxmox resources from the ephemeral sops
-# provider, which mock_provider does not support.
+# Uses a shared helper module to isolate Proxmox resources from the ephemeral
+# sops provider, which mock_provider does not support.
 
 # --- VM resource: UEFI and machine type ---
 
 run "vm_uses_uefi_bios" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -25,7 +25,7 @@ run "vm_uses_uefi_bios" {
 run "vm_uses_q35_machine" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -45,7 +45,7 @@ run "vm_uses_q35_machine" {
 run "vm_name_defaults_to_talos_cp_1" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -65,7 +65,7 @@ run "vm_name_defaults_to_talos_cp_1" {
 run "vm_stops_on_destroy" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -83,7 +83,7 @@ run "vm_stops_on_destroy" {
 run "vm_has_qemu_agent_enabled" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -103,7 +103,7 @@ run "vm_has_qemu_agent_enabled" {
 run "vm_uses_host_cpu_type" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -121,7 +121,7 @@ run "vm_uses_host_cpu_type" {
 run "vm_uses_virtio_scsi" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -141,7 +141,7 @@ run "vm_uses_virtio_scsi" {
 run "vm_efi_disk_type_is_4m" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -159,7 +159,7 @@ run "vm_efi_disk_type_is_4m" {
 run "vm_tpm_version_is_v2" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -179,7 +179,7 @@ run "vm_tpm_version_is_v2" {
 run "vm_disk_has_iothread_and_discard" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -204,7 +204,7 @@ run "vm_disk_has_iothread_and_discard" {
 run "vm_network_uses_virtio_on_vmbr0" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -229,7 +229,7 @@ run "vm_network_uses_virtio_on_vmbr0" {
 run "vm_os_type_is_linux" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -249,7 +249,7 @@ run "vm_os_type_is_linux" {
 run "image_downloads_secureboot_iso" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -279,7 +279,7 @@ run "image_downloads_secureboot_iso" {
 run "image_filename_includes_version" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
@@ -300,7 +300,7 @@ run "image_filename_includes_version" {
 run "vm_has_expected_tags" {
   command = plan
   module {
-    source = "./tests/setup-main"
+    source = "./tests/setup"
   }
   variables {
     proxmox_endpoint   = "https://pve.example.com:8006"
