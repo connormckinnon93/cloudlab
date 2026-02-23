@@ -75,3 +75,57 @@ output "image_url" {
 output "image_file_name" {
   value = proxmox_virtual_environment_download_file.talos_image.file_name
 }
+
+# --- Talos machine secrets ---
+
+output "talos_secrets_version" {
+  value = talos_machine_secrets.this.talos_version
+}
+
+# --- Talos machine configuration (input attributes) ---
+
+output "talos_machine_config_cluster_name" {
+  value = data.talos_machine_configuration.controlplane.cluster_name
+}
+
+output "talos_machine_config_cluster_endpoint" {
+  value = data.talos_machine_configuration.controlplane.cluster_endpoint
+}
+
+output "talos_machine_config_machine_type" {
+  value = data.talos_machine_configuration.controlplane.machine_type
+}
+
+output "talos_machine_config_talos_version" {
+  value = data.talos_machine_configuration.controlplane.talos_version
+}
+
+# --- Talos client configuration (input attributes) ---
+
+output "talos_client_config_cluster_name" {
+  value = data.talos_client_configuration.this.cluster_name
+}
+
+output "talos_client_config_endpoints" {
+  value = data.talos_client_configuration.this.endpoints
+}
+
+output "talos_client_config_nodes" {
+  value = data.talos_client_configuration.this.nodes
+}
+
+# --- Talos machine configuration apply ---
+
+output "talos_config_patches" {
+  value = talos_machine_configuration_apply.controlplane.config_patches
+}
+
+# --- Talos bootstrap and kubeconfig ---
+
+output "talos_bootstrap_node" {
+  value = talos_machine_bootstrap.this.node
+}
+
+output "talos_kubeconfig_node" {
+  value = talos_cluster_kubeconfig.this.node
+}
