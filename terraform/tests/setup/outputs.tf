@@ -1,6 +1,6 @@
-# Outputs for test assertions.
+# Outputs for test assertions — only values that tests actually reference.
 
-# --- VM attributes ---
+# --- VM ---
 
 output "vm_name" {
   value = proxmox_virtual_environment_vm.talos.name
@@ -54,11 +54,7 @@ output "vm_tags" {
   value = proxmox_virtual_environment_vm.talos.tags
 }
 
-output "vm_boot_order" {
-  value = proxmox_virtual_environment_vm.talos.boot_order
-}
-
-# --- Image download attributes ---
+# --- Image download ---
 
 output "image_content_type" {
   value = proxmox_virtual_environment_download_file.talos_image.content_type
@@ -76,13 +72,11 @@ output "image_file_name" {
   value = proxmox_virtual_environment_download_file.talos_image.file_name
 }
 
-# --- Talos machine secrets ---
+# --- Talos ---
 
 output "talos_secrets_version" {
   value = talos_machine_secrets.this.talos_version
 }
-
-# --- Talos machine configuration (input attributes) ---
 
 output "talos_machine_config_cluster_name" {
   value = data.talos_machine_configuration.controlplane.cluster_name
@@ -96,16 +90,6 @@ output "talos_machine_config_machine_type" {
   value = data.talos_machine_configuration.controlplane.machine_type
 }
 
-output "talos_machine_config_talos_version" {
-  value = data.talos_machine_configuration.controlplane.talos_version
-}
-
-# --- Talos client configuration (input attributes) ---
-
-output "talos_client_config_cluster_name" {
-  value = data.talos_client_configuration.this.cluster_name
-}
-
 output "talos_client_config_endpoints" {
   value = data.talos_client_configuration.this.endpoints
 }
@@ -114,13 +98,9 @@ output "talos_client_config_nodes" {
   value = data.talos_client_configuration.this.nodes
 }
 
-# --- Talos machine configuration apply ---
-
 output "talos_config_patches" {
   value = talos_machine_configuration_apply.controlplane.config_patches
 }
-
-# --- Talos bootstrap and kubeconfig ---
 
 output "talos_bootstrap_node" {
   value = talos_machine_bootstrap.this.node
