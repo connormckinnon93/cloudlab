@@ -28,5 +28,5 @@ pre-commit:
 commit-msg:
   commands:
     conventional:
-      run: 'grep -qE "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+" {1}'
-      fail_text: "Commit message must follow conventional commits: type(scope): message"
+      run: 'grep -qE "^(Merge .+|(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+)$" {1}'
+      fail_text: "Commit message must follow conventional commits: type(scope): message (merge commits are also allowed)"

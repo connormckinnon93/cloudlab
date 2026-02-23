@@ -9,7 +9,3 @@ resources:
   - helmrelease-loki.yaml
   - helmrelease-alloy.yaml
   - grafana-datasource-loki.yaml
-  - httproute-grafana.yaml
-  - httproute-prometheus.yaml
-  - httproute-alertmanager.yaml
-  - httproute-alloy.yaml

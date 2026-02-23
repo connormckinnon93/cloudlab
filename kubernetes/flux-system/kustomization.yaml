@@ -4,6 +4,7 @@ resources:
 - gotk-components.yaml
 - gotk-sync.yaml
 - infrastructure.yaml
+- infrastructure-config.yaml
 - cluster-policies.yaml
 - apps.yaml
 - provider-alertmanager.yaml
