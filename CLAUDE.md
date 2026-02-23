@@ -40,6 +40,7 @@ mise run flux:sops-key    # Load age key into cluster for SOPS decryption
 | `terraform/.tflint.hcl` | tflint linter configuration |
 | `lefthook.yml` | Git hooks (pre-commit: fmt, validate, lint; commit-msg: conventional commits) |
 | `.github/workflows/check.yml` | GitHub Actions CI — runs `mise run check` on PRs |
+| `kubernetes/kustomization.yaml` | Root Kustomize entry point — scopes `flux-system` Kustomization CRD to `flux-system/` only |
 | `kubernetes/flux-system/` | Auto-generated Flux controllers and sync config |
 | `kubernetes/flux-system/infrastructure.yaml` | Flux Kustomization CRD — reconciles `kubernetes/infrastructure/` |
 | `kubernetes/flux-system/apps.yaml` | Flux Kustomization CRD — reconciles `kubernetes/apps/` |
@@ -94,6 +95,6 @@ Three validation contexts: lefthook runs a fast subset on pre-commit (terraform 
 - **VM IP bootstrapping**: `talos_machine_configuration_apply` connects to the VM's DHCP address (via QEMU guest agent `ipv4_addresses`), not the static IP being configured. Post-reboot resources (bootstrap, kubeconfig) use the static IP.
 - **SOPS creation rules**: Files must match `\.enc\.(json|yaml)$` pattern. The `config:export` task writes directly to `.enc.yaml` filenames and uses `sops encrypt -i` (in-place)
 - **Mise task args**: Use `usage` field with `var=#true` for optional arguments (not `arg()` template function)
-- **Flux Kustomization hierarchy**: Flux CRDs (`infrastructure.yaml`, `apps.yaml`) live in `kubernetes/flux-system/` and are listed in its Kustomize `kustomization.yaml`. Target directories (`infrastructure/`, `apps/`) have their own Kustomize `kustomization.yaml` with resource lists. This avoids the naming conflict between Flux Kustomization CRDs and Kustomize's `kustomization.yaml`.
+- **Flux Kustomization hierarchy**: Flux CRDs (`infrastructure.yaml`, `apps.yaml`) live in `kubernetes/flux-system/` and are listed in its Kustomize `kustomization.yaml`. Target directories (`infrastructure/`, `apps/`) have their own Kustomize `kustomization.yaml` with resource lists. This avoids the naming conflict between Flux Kustomization CRDs and Kustomize's `kustomization.yaml`. The `flux-system` Kustomization CRD watches `path: ./kubernetes` — a root `kubernetes/kustomization.yaml` scopes it to `flux-system/` so it never encounters encrypted files meant for `infrastructure` or `apps`.
 - **`mise run check` scope**: The `check` task runs from the project root (not `dir = "terraform"`). Terraform commands run in a subshell. Kubernetes validation is guarded by `[ -d kubernetes ]` and skips if the directory doesn't exist.
 - **SOPS age key in cluster**: The `sops-age` Secret in `flux-system` provides the age private key to kustomize-controller for SOPS decryption. Created via `mise run flux:sops-key` — not managed by Terraform to keep the private key out of state. Re-run after cluster rebuild.
