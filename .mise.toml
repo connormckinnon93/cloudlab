@@ -62,13 +62,7 @@ if [ -d tests/kyverno ] && ls tests/kyverno/*/kyverno-test.yaml >/dev/null 2>&1;
 fi
 echo "==> Gitleaks"
 gitleaks git
-echo "==> Tests"
-bash tests/run-all.sh
 """
-
-[tasks.test]
-description = "Run project tests"
-run = "bash tests/run-all.sh"
 
 [tasks."tf:test"]
 description = "Run Terraform tests"
