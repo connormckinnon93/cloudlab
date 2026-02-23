@@ -3,5 +3,6 @@ kind: Kustomization
 resources:
   - gateway-api
   - cert-manager
+  - traefik
   - nfs-provisioner
   - kyverno
