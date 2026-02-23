@@ -80,5 +80,9 @@ spec:
               period: 24h
       storage:
         type: filesystem
+    chunksCache:
+      enabled: false
+    resultsCache:
+      enabled: false
     gateway:
       enabled: false
