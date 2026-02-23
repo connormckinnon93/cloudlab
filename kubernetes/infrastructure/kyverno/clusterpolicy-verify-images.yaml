@@ -1,0 +1,32 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+spec:
+  webhookConfiguration:
+    timeoutSeconds: 30
+  rules:
+    - name: verify-sigstore-keyless
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kyverno
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/fluxcd/*"
+            - "ghcr.io/kyverno/*"
+          failureAction: Audit
+          attestors:
+            - entries:
+                - keyless:
+                    issuerRegExp: "https://token\\.actions\\.githubusercontent\\..*"
+                    subjectRegExp: "https://github\\.com/.+"
+                    rekor:
+                      url: https://rekor.sigstore.dev
