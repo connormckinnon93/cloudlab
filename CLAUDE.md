@@ -173,3 +173,12 @@ Patterns learned from building this project that apply to all future work.
 
 ### App deployment pattern
 - **Use `valuesFrom` with SOPS-encrypted Secrets for credentials.** Flux deep-merges Secret values into HelmRelease values before Helm renders templates. Store only the sensitive subset (e.g., bcrypt password hash) in the Secret; keep all other config in the HelmRelease values block.
+
+### Identity and auth
+- **Verify upstream project changes before planning.** Authentik removed Redis in v2025.10 — the design assumed Redis was still required. Always check release notes for the target version. Stale assumptions create unnecessary infrastructure.
+- **Prefer `existingSecret` over inline credentials.** Authentik's `existingSecret.secretName` loads all `AUTHENTIK_*` environment variables from one Secret. Simpler than `valuesFrom` deep-merge when the chart supports it natively.
+- **Use `forward_domain` mode, not `forward_single`.** `forward_domain` shares a single auth cookie across all subdomains (`cookie_domain: catinthehack.ca`). `forward_single` requires a separate provider per subdomain.
+- **Separate operator from instance.** CloudNativePG operator (`cnpg-system`) installs CRDs; the PostgreSQL cluster (`postgres`) is a separate HelmRelease with `dependsOn`. This pattern avoids CRD race conditions and allows multiple clusters from one operator.
+- **Place CRD-dependent middleware in `cluster-policies/`.** The Traefik ForwardAuth Middleware uses `traefik.io/v1alpha1` — a CRD installed by Traefik's HelmRelease. Placing the Middleware in `infrastructure/` deadlocks Flux's server-side dry-run. The `cluster-policies` layer depends on `infrastructure`, so CRDs exist before the Middleware is applied.
+- **Blueprint cross-file references use `!Find`, not `!KeyOf`.** Within a single blueprint file, `!KeyOf` resolves by local `id` field. Across files (e.g., blueprint 03 referencing a flow from 01), `!Find` performs a database lookup by identifier. Wrong reference type silently fails.
+- **Bitnami charts are frozen — plan alternatives.** Docker Hub OCI registry stopped publishing Bitnami charts and images in August 2025. CloudNativePG replaces Bitnami PostgreSQL. Future services needing Redis should evaluate alternatives (Dragonfly, KeyDB, or upstream Redis charts).
