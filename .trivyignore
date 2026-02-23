@@ -1,0 +1,3 @@
+# Flux gotk-components — upstream generated, can't modify
+AVD-KSV-0041  # ClusterRole manages secrets (Flux needs this for SOPS)
+AVD-KSV-0046  # ClusterRole manages all resources (Flux CRD controller by design)

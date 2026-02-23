@@ -1,5 +1,24 @@
 checks:
   addAllBuiltIn: true
   exclude:
-    - "unset-cpu-requirements"       # Requests set, not limits — intentional for homelab
-    - "unset-memory-requirements"    # Same
+    # Resource limits — requests set, not limits; intentional for homelab
+    - "unset-cpu-requirements"
+    - "unset-memory-requirements"
+
+    # Single-node homelab — these enterprise patterns don't apply
+    - "minimum-three-replicas"         # Single node, 1 replica is correct
+    - "no-node-affinity"               # Single node, no scheduling needed
+    - "required-annotation-email"      # No org email convention
+    - "required-label-owner"           # No org owner label convention
+    - "dnsconfig-options"              # CoreDNS handles DNS resolution
+    - "non-isolated-pod"               # NetworkPolicies are a roadmap item
+    - "restart-policy"                 # Deployments default to Always
+
+    # Single-replica controllers — Flux uses Recreate, single node doesn't need rolling
+    - "no-rolling-update-strategy"
+
+    # Flux gotk-components — upstream generated, can't modify
+    - "wildcard-in-rules"              # Flux ClusterRoles use wildcard RBAC by design
+    - "access-to-create-pods"          # Flux controllers need pod creation
+    - "access-to-secrets"              # Flux needs secrets for SOPS decryption
+    - "cluster-admin-role-binding"     # Flux binds kustomize/helm controllers to cluster-admin

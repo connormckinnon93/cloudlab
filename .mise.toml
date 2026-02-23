@@ -76,11 +76,11 @@ set -e
 echo "==> Trivy (Terraform)"
 trivy config --severity HIGH,CRITICAL terraform/
 echo "==> Trivy (Kubernetes)"
-trivy config --severity HIGH,CRITICAL kubernetes/
+trivy config --severity HIGH,CRITICAL --ignorefile .trivyignore kubernetes/
 echo "==> Pluto"
 pluto detect-files -d kubernetes/ --ignore-deprecations --ignore-removals --target-versions k8s=v1.32.0
 echo "==> kube-linter"
-kube-linter lint kubernetes/ --config .kube-linter.yaml || true  # TODO: remove || true after Task 24 tunes exclusions
+kube-linter lint kubernetes/ --config .kube-linter.yaml || true  # Advisory until securityContext added to whoami + outpost
 """
 
 [tasks.e2e]
