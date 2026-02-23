@@ -102,3 +102,15 @@ arg "<schematic_id>" help="Schematic ID from factory.talos.dev"
 arg "<version>" help="TalosOS version to upgrade to"
 """
 run = "talosctl upgrade --image factory.talos.dev/installer-secureboot/${usage_schematic_id?}:${usage_version?} --preserve"
+
+[tasks."flux:sops-key"]
+description = "Create or rotate the sops-age Secret in flux-system"
+run = """
+set -e
+if kubectl get secret sops-age -n flux-system >/dev/null 2>&1; then
+  kubectl delete secret sops-age -n flux-system
+fi
+kubectl create secret generic sops-age \
+  --namespace=flux-system \
+  --from-file=age.agekey=.age-key.txt
+"""

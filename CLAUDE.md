@@ -13,6 +13,7 @@ mise run config:export    # Encrypt talosconfig and kubeconfig
 mise run config:decrypt   # Decrypt configs for local use
 mise run check            # Run all validators: tf fmt, validate, lint, kustomize, kubeconform, gitleaks
 mise run sops:edit        # Edit encrypted secrets (defaults to secrets.enc.json)
+mise run flux:sops-key    # Load age key into cluster for SOPS decryption
 ```
 
 ## Repository Structure
@@ -95,3 +96,4 @@ Three validation contexts: lefthook runs a fast subset on pre-commit (terraform 
 - **Mise task args**: Use `usage` field with `var=#true` for optional arguments (not `arg()` template function)
 - **Flux Kustomization hierarchy**: Flux CRDs (`infrastructure.yaml`, `apps.yaml`) live in `kubernetes/flux-system/` and are listed in its Kustomize `kustomization.yaml`. Target directories (`infrastructure/`, `apps/`) have their own Kustomize `kustomization.yaml` with resource lists. This avoids the naming conflict between Flux Kustomization CRDs and Kustomize's `kustomization.yaml`.
 - **`mise run check` scope**: The `check` task runs from the project root (not `dir = "terraform"`). Terraform commands run in a subshell. Kubernetes validation is guarded by `[ -d kubernetes ]` and skips if the directory doesn't exist.
+- **SOPS age key in cluster**: The `sops-age` Secret in `flux-system` provides the age private key to kustomize-controller for SOPS decryption. Created via `mise run flux:sops-key` — not managed by Terraform to keep the private key out of state. Re-run after cluster rebuild.
