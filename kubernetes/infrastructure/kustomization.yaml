@@ -6,3 +6,4 @@ resources:
   - traefik
   - nfs-provisioner
   - kyverno
+  - monitoring

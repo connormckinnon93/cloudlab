@@ -1,0 +1,168 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+  namespace: monitoring
+spec:
+  interval: 30m
+  timeout: 10m
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: "82.2.1"
+      interval: 60m
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    prometheus:
+      prometheusSpec:
+        retention: 7d
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            memory: 1Gi
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: nfs
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 10Gi
+      thanosService:
+        enabled: false
+      thanosServiceMonitor:
+        enabled: false
+
+    additionalPrometheusRulesMap:
+      flux-rules:
+        groups:
+          - name: flux.rules
+            rules:
+              - alert: FluxReconciliationFailure
+                expr: gotk_reconcile_condition{type="Ready",status="False"} == 1
+                for: 5m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Flux {{ $labels.kind }}/{{ $labels.name }} reconciliation failed"
+                  description: "{{ $labels.kind }}/{{ $labels.name }} in namespace {{ $labels.exported_namespace }} has been failing for more than 5 minutes."
+      cert-manager-rules:
+        groups:
+          - name: cert-manager.rules
+            rules:
+              - alert: CertManagerCertExpirySoon
+                expr: certmanager_certificate_expiration_timestamp_seconds - time() < 604800
+                for: 1h
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Certificate {{ $labels.name }} expires in less than 7 days"
+                  description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} expires in {{ $value | humanizeDuration }}."
+
+    alertmanager:
+      alertmanagerSpec:
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 64Mi
+        storage:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: nfs
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 1Gi
+        secrets:
+          - monitoring-secrets
+      config:
+        global:
+          resolve_timeout: 5m
+        route:
+          receiver: pushover-warning
+          group_by:
+            - alertname
+            - namespace
+          group_wait: 30s
+          group_interval: 5m
+          repeat_interval: 12h
+          routes:
+            - receiver: "null"
+              matchers:
+                - alertname = Watchdog
+            - receiver: pushover-critical
+              matchers:
+                - severity = critical
+              continue: false
+            - receiver: pushover-warning
+              matchers:
+                - severity = warning
+              continue: false
+        receivers:
+          - name: "null"
+          - name: pushover-critical
+            pushover_configs:
+              - user_key_file: /etc/alertmanager/secrets/monitoring-secrets/pushover-user-key
+                token_file: /etc/alertmanager/secrets/monitoring-secrets/pushover-api-token
+                priority: "1"
+                title: '{{ "{{" }} .CommonLabels.alertname {{ "}}" }}'
+                message: '{{ "{{" }} range .Alerts {{ "}}" }}{{ "{{" }} .Annotations.summary {{ "}}" }}{{ "{{" }} end {{ "}}" }}'
+          - name: pushover-warning
+            pushover_configs:
+              - user_key_file: /etc/alertmanager/secrets/monitoring-secrets/pushover-user-key
+                token_file: /etc/alertmanager/secrets/monitoring-secrets/pushover-api-token
+                priority: "0"
+                title: '{{ "{{" }} .CommonLabels.alertname {{ "}}" }}'
+                message: '{{ "{{" }} range .Alerts {{ "}}" }}{{ "{{" }} .Annotations.summary {{ "}}" }}{{ "{{" }} end {{ "}}" }}'
+
+    grafana:
+      admin:
+        existingSecret: monitoring-secrets
+        userKey: grafana-admin-user
+        passwordKey: grafana-admin-password
+      persistence:
+        enabled: true
+        storageClassName: nfs
+        size: 1Gi
+      sidecar:
+        datasources:
+          enabled: true
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 256Mi
+
+    nodeExporter:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
+
+    kube-state-metrics:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi

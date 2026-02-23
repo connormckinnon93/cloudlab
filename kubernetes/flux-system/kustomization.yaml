@@ -6,3 +6,5 @@ resources:
 - infrastructure.yaml
 - cluster-policies.yaml
 - apps.yaml
+- provider-alertmanager.yaml
+- alert-flux.yaml
