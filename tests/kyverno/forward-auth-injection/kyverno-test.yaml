@@ -8,7 +8,7 @@ resources:
   - resource.yaml
 results:
   - policy: inject-authentik-forward-auth
-    rule: add-forward-auth-middleware
+    rule: add-forward-auth-filter
     resources:
       - whoami
     patchedResources: patched-resource.yaml
