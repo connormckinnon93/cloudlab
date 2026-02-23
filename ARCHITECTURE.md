@@ -69,10 +69,18 @@ Both layers depend on infrastructure and reconcile in parallel.
 | Kyverno | Policy engine for image signature verification (audit mode) |
 | Monitoring | Prometheus, Grafana, Alertmanager, Loki, Alloy for observability |
 | AdGuard Home | DNS server with ad-blocking, backed by Unbound recursive resolver |
+| CloudNativePG | PostgreSQL operator — manages clusters, backups, and failover |
+| PostgreSQL | Shared database instance via CloudNativePG (single instance on NFS) |
+| Authentik | Identity provider with forward-auth proxy outpost for SSO across all services |
 
 ### Cluster policies
 
-Kyverno ClusterPolicy verifies GHCR image signatures (Flux, Kyverno) using Sigstore keyless attestation. Runs in audit mode; violations appear in PolicyReports (`kubectl get policyreport -A`).
+Kyverno ClusterPolicies:
+
+- **Image signature verification** — verifies GHCR image signatures (Flux, Kyverno) using Sigstore keyless attestation. Runs in audit mode; violations appear in PolicyReports (`kubectl get policyreport -A`).
+- **Forward-auth injection** — auto-injects `traefik.io/middleware` annotation on all HTTPRoutes for Authentik forward-auth. Opt out with label `auth.catinthehack.ca/skip: "true"`.
+
+A Traefik ForwardAuth Middleware (`middleware-forward-auth.yaml`) also lives in cluster-policies because it depends on Traefik CRDs installed by infrastructure.
 
 ### Apps
 
