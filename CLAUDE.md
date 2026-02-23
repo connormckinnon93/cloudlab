@@ -36,7 +36,8 @@ mise run flux:sops-key    # Load age key into cluster for SOPS decryption
 | `terraform/versions.tf` | Required providers and version constraints |
 | `terraform/variables.tf` | Variable declarations for VM and cluster config |
 | `terraform/config.auto.tfvars` | Non-sensitive configuration (committed, auto-loaded by Terraform) |
-| `terraform/providers.tf` | Sops + Proxmox provider configuration |
+| `terraform/providers.tf` | Secrets module + Proxmox provider configuration |
+| `terraform/secrets/main.tf` | SOPS decryption wrapped in module (tests use `override_module` to skip) |
 | `terraform/main.tf` | VM resource, TalosOS image download |
 | `terraform/talos.tf` | Talos machine config, bootstrap, kubeconfig retrieval |
 | `terraform/outputs.tf` | Terraform outputs (vm_id, talosconfig, kubeconfig) |
