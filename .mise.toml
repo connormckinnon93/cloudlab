@@ -86,7 +86,7 @@ trivy config --severity HIGH,CRITICAL kubernetes/
 echo "==> Pluto"
 pluto detect-files -d kubernetes/ --ignore-deprecations --ignore-removals --target-versions k8s=v1.32.0
 echo "==> kube-linter"
-kube-linter lint kubernetes/ --config .kube-linter.yaml || true
+kube-linter lint kubernetes/ --config .kube-linter.yaml || true  # TODO: remove || true after Task 24 tunes exclusions
 """
 
 [tasks.e2e]

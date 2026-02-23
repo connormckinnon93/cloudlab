@@ -1,5 +1,5 @@
 checks:
   addAllBuiltIn: true
   exclude:
-    - "unset-cpu-requirements"
-    - "unset-memory-requirements"
+    - "unset-cpu-requirements"       # Requests set, not limits — intentional for homelab
+    - "unset-memory-requirements"    # Same
