@@ -1,0 +1,44 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: nfs-provisioner
+  namespace: nfs-provisioner
+spec:
+  interval: 30m
+  timeout: 5m
+  chart:
+    spec:
+      chart: nfs-subdir-external-provisioner
+      version: "4.0.18"
+      interval: 60m
+      sourceRef:
+        kind: HelmRepository
+        name: nfs-provisioner
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    nfs:
+      server: 192.168.20.20
+      path: /volume1/kubernetes
+      mountOptions:
+        - nfsvers=4
+        - hard
+        - noatime
+    storageClass:
+      name: nfs
+      defaultClass: true
+      reclaimPolicy: Delete
+      archiveOnDelete: true
+      allowVolumeExpansion: true
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+    replicaCount: 1
