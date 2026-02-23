@@ -62,6 +62,9 @@ spec:
       websecure:
         port: 8443
         hostPort: 443
+      traefik:
+        expose:
+          default: true
     service:
       type: ClusterIP
     resources:
