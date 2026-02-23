@@ -148,3 +148,13 @@ Patterns learned from building this project that apply to all future work.
 - **Pin exact Helm chart versions at implementation time.** Plans should specify major version ranges (e.g., `82.x`). The implementing agent looks up the latest patch version when writing the HelmRelease.
 - **Tightly coupled components belong in one directory.** The observability stack shares a namespace, HelmRepositories, and cross-references. Splitting into separate directories creates hidden dependencies. One directory with prefixed filenames (`helmrelease-loki.yaml`, `helmrelease-alloy.yaml`) keeps everything self-contained.
 - **Review Helm chart values against upstream docs before implementation.** A four-agent review caught 21 issues — duplicate YAML keys, wrong nesting paths, missing required flags. These would have silently broken deployment with no validation error.
+- **Check the chart's dependency tree for library version.** The gabe565/adguard-home chart pins bjw-s common library v1.5.1, where `hostNetwork` and `dnsPolicy` are root-level values fields. The v2.x library moved them under `defaultPodOptions`. Wrong nesting silently produces a pod without host networking — no error, just broken DNS.
+- **Add Helm to tooling early and run `helm show values`.** Download the actual chart before writing HelmReleases. Default values reveal field names, nesting depth, and type expectations. The AdGuard Home chart accepts `config` as either a YAML string or structured map — only visible by reading the template source.
+- **Cross-reference resource names against existing cluster config.** StorageClass `nfs` vs `nfs-client` was caught only by comparing against the nfs-provisioner HelmRelease. Always verify names of cluster-scoped resources (StorageClasses, ClusterIssuers, Gateways) against what is already deployed.
+
+### Network architecture
+- **hostNetwork pods need `dnsPolicy: ClusterFirstWithHostNet`.** Without it, a pod using the host network stack resolves DNS through the node's `/etc/resolv.conf` and cannot reach cluster services like `unbound.adguard.svc.cluster.local`.
+- **Prevent DNS circular dependencies at the node level.** When the cluster hosts the network's DNS server, nodes must have static nameservers independent of DHCP. Otherwise a node restart deadlocks: kubelet needs DNS to pull images, but the DNS pod cannot start without the images. Set `machine.network.nameservers` in TalosOS to external resolvers (e.g., `9.9.9.10`).
+
+### App deployment pattern
+- **Use `valuesFrom` with SOPS-encrypted Secrets for credentials.** Flux deep-merges Secret values into HelmRelease values before Helm renders templates. Store only the sensitive subset (e.g., bcrypt password hash) in the Secret; keep all other config in the HelmRelease values block.
