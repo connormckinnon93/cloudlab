@@ -18,9 +18,54 @@ spec:
     - kind: HelmRelease
       name: "*"
       namespace: monitoring
+    - kind: HelmRelease
+      name: "*"
+      namespace: traefik
+    - kind: HelmRelease
+      name: "*"
+      namespace: cert-manager
+    - kind: HelmRelease
+      name: "*"
+      namespace: nfs-provisioner
+    - kind: HelmRelease
+      name: "*"
+      namespace: kyverno
+    - kind: HelmRelease
+      name: "*"
+      namespace: adguard
+    - kind: HelmRelease
+      name: "*"
+      namespace: cnpg-system
+    - kind: HelmRelease
+      name: "*"
+      namespace: postgres
+    - kind: HelmRelease
+      name: "*"
+      namespace: authentik
     - kind: HelmRepository
       name: "*"
       namespace: flux-system
     - kind: HelmRepository
       name: "*"
       namespace: monitoring
+    - kind: HelmRepository
+      name: "*"
+      namespace: traefik
+    - kind: HelmRepository
+      name: "*"
+      namespace: cert-manager
+    - kind: HelmRepository
+      name: "*"
+      namespace: nfs-provisioner
+    - kind: HelmRepository
+      name: "*"
+      namespace: kyverno
+    - kind: HelmRepository
+      name: "*"
+      namespace: adguard
+    - kind: HelmRepository
+      name: "*"
+      namespace: cnpg-system
+    - kind: HelmRepository
+      name: "*"
+      namespace: authentik
