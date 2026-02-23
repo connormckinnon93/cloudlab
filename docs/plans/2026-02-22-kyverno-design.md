@@ -1,12 +1,12 @@
 # Kyverno Image Verification
 
-Deploy Kyverno as a policy engine with a catch-all image signature verification policy in audit mode.
+Deploy Kyverno as a policy engine with image signature verification in audit mode, scoped to GHCR images signed via GitHub Actions.
 
 ## Scope
 
 - Deploy Kyverno via Flux HelmRelease
-- Create a ClusterPolicy that verifies all container images against Sigstore's keyless signing infrastructure
-- Run in audit mode: log violations, admit unsigned images
+- Create a ClusterPolicy that verifies GHCR container images (Flux, Kyverno) against Sigstore's keyless signing infrastructure
+- Run in audit mode: log violations, admit unverified images
 - Update the roadmap: remove etcd backups (step 12), add future Kyverno hardening items
 
 ## Architecture
@@ -22,7 +22,7 @@ kubernetes/infrastructure/kyverno/
   namespace.yaml                          # kyverno namespace
   helmrepository.yaml                     # https://kyverno.github.io/kyverno/
   helmrelease.yaml                        # kyverno chart with resource limits
-  clusterpolicy-verify-images.yaml        # catch-all image verification policy
+  clusterpolicy-verify-images.yaml        # GHCR image verification policy
   kustomization.yaml                      # lists above resources
 ```
 
@@ -30,7 +30,7 @@ The parent `kubernetes/infrastructure/kustomization.yaml` adds `kyverno` to its 
 
 ### Image Verification Policy
 
-A single `ClusterPolicy` matches all Pods and attempts to verify every container image against Sigstore's public-good infrastructure:
+A single `ClusterPolicy` verifies GHCR images (Flux and Kyverno controllers) against Sigstore's public-good infrastructure. System namespaces are excluded to avoid circular dependency risks:
 
 ```yaml
 apiVersion: kyverno.io/v1
@@ -38,8 +38,8 @@ kind: ClusterPolicy
 metadata:
   name: verify-image-signatures
 spec:
-  validationFailureAction: Audit
-  webhookTimeoutSeconds: 30
+  webhookConfiguration:
+    timeoutSeconds: 30
   rules:
     - name: verify-sigstore-keyless
       match:
@@ -47,9 +47,17 @@ spec:
           - resources:
               kinds:
                 - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kyverno
       verifyImages:
         - imageReferences:
-            - "*"
+            - "ghcr.io/fluxcd/*"
+            - "ghcr.io/kyverno/*"
+          failureAction: Audit
           attestors:
             - entries:
                 - keyless:
@@ -59,7 +67,9 @@ spec:
                       url: https://rekor.sigstore.dev
 ```
 
-The wildcard `*` on `imageReferences` means Kyverno checks every image. In audit mode, unsigned images (system images, images signed with project-specific keys, unsigned third-party images) are admitted but appear as violations in PolicyReports. This provides visibility into the cluster's supply chain posture without breaking workloads.
+Scoping `imageReferences` to `ghcr.io/fluxcd/*` and `ghcr.io/kyverno/*` targets images actually signed via GitHub Actions keyless. This keeps PolicyReport results meaningful -- violations indicate genuine signing failures rather than expected mismatches for images using other signing methods. System namespaces (`kube-system`, `kyverno`) are excluded to prevent circular dependency risks during bootstrapping.
+
+Migrating to enforce mode requires narrowing scope further or adding attestor entries for other signing authorities before flipping the `failureAction`.
 
 Inspect violations:
 
