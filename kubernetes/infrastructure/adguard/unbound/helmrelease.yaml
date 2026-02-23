@@ -1,0 +1,73 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: unbound
+  namespace: adguard
+spec:
+  interval: 30m
+  timeout: 5m
+  chart:
+    spec:
+      chart: unbound
+      version: "0.2.0"
+      interval: 60m
+      sourceRef:
+        kind: HelmRepository
+        name: unbound
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    replicaCount: 1
+    containers:
+      unbound:
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+        config:
+          verbosity: 1
+          logReplies: "no"
+          logQueries: "no"
+          logTagQueryreply: "no"
+          logLocalActions: "no"
+          logServfail: "yes"
+          numThreads: 1
+          doTcp: "yes"
+          doIp6: "no"
+          prefetch: "yes"
+          cacheMaxTtl: 86400
+          cacheMaxNegativeTtl: 300
+          tcpUpstream: "no"
+          valPermissiveMode: "no"
+          rootHints:
+            enable: true
+            dir: "/var/lib/unbound/root.hints"
+          autoTrustAnchorFile:
+            enable: true
+            file: "/var/lib/unbound/root.key"
+          allowedIpRanges:
+            - "10.0.0.0/8"
+            - "172.16.0.0/12"
+            - "192.168.0.0/16"
+      exporter:
+        resources:
+          requests:
+            cpu: 2m
+            memory: 10Mi
+    metrics:
+      enabled: false
+    serviceMonitor:
+      enabled: false
+    service:
+      type: ClusterIP
+      tcp:
+        enabled: true
+      udp:
+        enabled: true
