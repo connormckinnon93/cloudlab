@@ -7,3 +7,4 @@ resources:
   - nfs-provisioner
   - kyverno
   - adguard
+  - monitoring

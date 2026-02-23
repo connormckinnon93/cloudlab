@@ -13,8 +13,13 @@ spec:
   prune: true
   wait: true
   timeout: 5m
+  # Depends on cluster-policies (not infrastructure directly) to form a linear
+  # chain: flux-system -> infrastructure -> cluster-policies -> apps.
+  # cluster-policies exists as a separate layer because Flux's server-side
+  # dry-run rejects CRD-based resources (like Kyverno ClusterPolicy) before
+  # the HelmRelease that installs those CRDs has run.
   dependsOn:
-    - name: infrastructure
+    - name: cluster-policies
   decryption:
     provider: sops
     secretRef:

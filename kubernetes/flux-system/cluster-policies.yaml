@@ -13,5 +13,8 @@ spec:
   prune: true
   wait: true
   timeout: 5m
+  # Separate layer from infrastructure because Flux's server-side dry-run
+  # rejects CRD-based resources (like Kyverno ClusterPolicy) before the
+  # HelmRelease that installs those CRDs has run.
   dependsOn:
     - name: infrastructure
