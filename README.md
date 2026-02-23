@@ -84,7 +84,7 @@ Secrets are encrypted with SOPS (age backend) and stored in git. The SOPS Terraf
 
 ## Roadmap
 
-Thirty-one steps in six phases. Each step is self-contained; dependency order is respected within phases.
+Thirty-two steps in six phases. Each step is self-contained; dependency order is respected within phases.
 
 ### Decisions to Make First
 
@@ -109,12 +109,12 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 5. ~~**Ingress controller** — Route external HTTP/HTTPS traffic to cluster services~~
 6. ~~**cert-manager** — Automated TLS certificates via Let's Encrypt~~
 7. **Internal DNS** — Resolve friendly service names to the ingress IP
-8. **Monitoring** — Prometheus + Grafana for metrics, dashboards, and cluster health
+8. ~~**Monitoring** — Prometheus + Grafana for metrics, dashboards, and cluster health~~
 
 ### Phase 2: Operational Excellence
 
-9. **Log aggregation** — Loki + Promtail for centralized container logs alongside Prometheus metrics
-10. **Alerting** — Alertmanager with notifications to Pushover, Discord, or similar
+9. ~~**Log aggregation** — Loki + Alloy for centralized container logs alongside Prometheus metrics~~
+10. ~~**Alerting** — Alertmanager with Pushover notifications for critical and warning alerts~~
 11. ~~**Kyverno** — Image signature verification first, general policies later~~
 12. **Authentication gateway** — Single sign-on and 2FA in front of all services
 13. **Gitea/Forgejo** — First self-hosted app; migrate Flux source from GitHub
@@ -137,14 +137,15 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 24. **PersistentVolume backups** — Volsync for scheduled PVC replication to NAS
 25. **Cluster-wide backups** — Velero for scheduled backup and restore of all cluster resources
 26. **Cluster dashboard** — Headlamp for visual cluster inspection behind auth
+27. **Thanos sidecar** — Long-term metrics storage and multi-cluster query federation
 
 ### Phase 5: Platform Maturity
 
-27. **Image pull-through cache** — Spegel for peer-to-peer registry mirroring on-cluster
-28. **Descheduler** — Evict pods that violate scheduling constraints over time
+28. **Image pull-through cache** — Spegel for peer-to-peer registry mirroring on-cluster
+29. **Descheduler** — Evict pods that violate scheduling constraints over time
 
 ### Phase 6: Operational Confidence
 
-29. **Chaos testing** — Break things on purpose; verify alerts fire and recovery works
-30. **Resource quotas** — Per-namespace CPU/memory limits to prevent resource starvation
-31. **GitOps repo refactor** — Kustomize base/overlays structure for multi-cluster readiness
+30. **Chaos testing** — Break things on purpose; verify alerts fire and recovery works
+31. **Resource quotas** — Per-namespace CPU/memory limits to prevent resource starvation
+32. **GitOps repo refactor** — Kustomize base/overlays structure for multi-cluster readiness

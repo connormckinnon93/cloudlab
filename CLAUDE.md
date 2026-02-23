@@ -54,6 +54,7 @@ mise run flux:sops-key    # Load age key into cluster for SOPS decryption
 | `kubernetes/infrastructure/gateway-api/` | Gateway API CRDs (v1.4.1, vendored) |
 | `kubernetes/infrastructure/cert-manager/` | cert-manager with DNS-01 via DigitalOcean |
 | `kubernetes/infrastructure/traefik/` | Traefik ingress with Gateway API, wildcard TLS |
+| `kubernetes/infrastructure/monitoring/` | Observability stack — kube-prometheus-stack, Loki, Alloy, alerting |
 
 ## Providers
 
@@ -118,3 +119,13 @@ Three validation contexts: lefthook runs a fast subset on pre-commit (terraform 
 - **Traefik chart v38 redirect syntax**: The `redirectTo` property was removed from the values schema. Use `redirections.entryPoint.to` instead (see `ports.web.redirections` in helmrelease.yaml).
 - **Cross-namespace HTTPRoute**: Routes in app namespaces reference the Gateway with `parentRefs: [{name: traefik-gateway, namespace: traefik}]`. The Gateway permits this via `namespacePolicy.from: All`. Each app needs its own subdomain under `*.catinthehack.ca` — the wildcard cert covers all of them.
 - **App deployment pattern**: The whoami app (`kubernetes/apps/whoami/`) is the template for future services: namespace, Deployment, Service, HTTPRoute, and a Kustomize entry point. Register each app directory in `kubernetes/apps/kustomization.yaml`.
+- **Observability namespace**: All monitoring components (Prometheus, Grafana, Alertmanager, Loki, Alloy) share the `monitoring` namespace in a single `kubernetes/infrastructure/monitoring/` directory. This deviates from the one-namespace-per-component pattern — these components form a tightly coupled system with shared HelmRepositories and cross-references.
+- **Grafana datasource auto-discovery**: kube-prometheus-stack's Grafana sidecar watches for ConfigMaps labeled `grafana_datasource: "1"` in the monitoring namespace. Loki registers via this mechanism (`grafana-datasource-loki.yaml`).
+- **Alertmanager Pushover credentials**: Mounted from the `monitoring-secrets` Secret via `alertmanager.alertmanagerSpec.secrets` in kube-prometheus-stack values. Credentials read from files at `/etc/alertmanager/secrets/monitoring-secrets/`. Edit with `mise run sops:edit kubernetes/infrastructure/monitoring/secret.enc.yaml`.
+- **Alloy log collection**: Uses `loki.source.kubernetes` (Kubernetes API-based) not file-based tailing. No `/var/log` mount needed — correct for TalosOS's immutable filesystem. River config embedded in HelmRelease values via `alloy.configMap.content`.
+- **Flux notification-controller**: Provider (type: alertmanager) and Alert resources in `flux-system/` push GitOps events to Alertmanager. Alert includes cross-namespace event sources for both `flux-system` and `monitoring`. Second signal path alongside Prometheus scraping Flux metrics via PodMonitor.
+- **Flux metrics PodMonitor**: Lives in `monitoring` namespace, targets Flux controller pods in `flux-system` via `namespaceSelector`. Required for the FluxReconciliationFailure custom alert rule.
+- **Loki storage**: Filesystem-backed TSDB in single-binary mode on NFS. Known risk: NFS's weaker fsync semantics. Fallback: switch to hostPath on local NVMe if corruption occurs.
+- **Loki retention**: Requires both `limits_config.retention_period` and `compactor.retention_enabled: true`. Without the compactor flag, expired data is never deleted.
+- **Exposed UIs without auth**: Grafana has built-in login. Prometheus, Alertmanager, and Alloy have no authentication — first candidates for the auth gateway (step 12).
+- **flux-system/kustomization.yaml manual additions**: Contains custom resources (infrastructure.yaml, apps.yaml, cluster-policies.yaml, provider-alertmanager.yaml, alert-flux.yaml) that must be re-added after `flux bootstrap` operations.
