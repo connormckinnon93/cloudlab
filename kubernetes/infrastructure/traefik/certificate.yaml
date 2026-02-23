@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-catinthehack-ca
+  namespace: traefik
+spec:
+  secretName: wildcard-catinthehack-ca-tls
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.catinthehack.ca"
+    - "catinthehack.ca"
