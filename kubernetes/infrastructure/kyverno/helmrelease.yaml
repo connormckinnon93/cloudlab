@@ -24,6 +24,16 @@ spec:
   values:
     admissionController:
       replicas: 1
+      rbac:
+        clusterRole:
+          extraResources:
+            - apiGroups:
+                - traefik.io
+              resources:
+                - middlewares
+              verbs:
+                - get
+                - list
       container:
         resources:
           requests:
@@ -32,6 +42,19 @@ spec:
           limits:
             memory: 384Mi
     backgroundController:
+      rbac:
+        clusterRole:
+          extraResources:
+            - apiGroups:
+                - traefik.io
+              resources:
+                - middlewares
+              verbs:
+                - create
+                - get
+                - list
+                - update
+                - delete
       resources:
         requests:
           cpu: 25m
