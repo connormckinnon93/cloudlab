@@ -65,6 +65,8 @@ spec:
         port: 53
         upstream_dns:
           - unbound.adguard.svc.cluster.local
+        bootstrap_dns:
+          - 10.96.0.10
         rewrites:
           - domain: "*.catinthehack.ca"
             answer: 192.168.20.100
