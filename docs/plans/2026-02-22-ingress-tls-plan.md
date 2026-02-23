@@ -12,9 +12,11 @@
 
 ## Prerequisites
 
-- DigitalOcean API token with DNS read/write scope (create at DigitalOcean dashboard → API → Personal access tokens)
+- DigitalOcean API token — create a **custom-scoped** token with DNS read/write permissions only (not a full-access token). Create at DigitalOcean dashboard → API → Personal access tokens.
 - Email address for Let's Encrypt registration
 - SOPS age key configured (`.sops.yaml` already present)
+
+> **Note:** Consider testing with Let's Encrypt staging (`https://acme-staging-v02.api.letsencrypt.org/directory`) first to avoid rate limits during initial setup. The ClusterIssuer server URL can be switched to production after confirming the DNS-01 flow works.
 
 ---
 
@@ -308,12 +310,16 @@ git commit -m "feat(cert-manager): add ClusterIssuer and DO API token for DNS-01
 
 **Step 1: Create namespace.yaml**
 
+TalosOS enforces `baseline` Pod Security Admission by default. hostPort bindings are blocked under `baseline`. The `privileged` label exempts this namespace.
+
 ```yaml
 # kubernetes/infrastructure/traefik/namespace.yaml
 apiVersion: v1
 kind: Namespace
 metadata:
   name: traefik
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
 ```
 
 **Step 2: Create helmrepository.yaml**
@@ -370,6 +376,7 @@ spec:
         enabled: true
     gateway:
       enabled: true
+      name: traefik-gateway
       listeners:
         websecure:
           port: 8443
@@ -410,16 +417,23 @@ spec:
 Key values:
 - `providers.kubernetesIngress.enabled: false` — all-in on Gateway API, no Ingress resources
 - `providers.kubernetesGateway.enabled: true` — Traefik watches Gateway/HTTPRoute resources
-- `gateway.enabled: true` — chart creates a Gateway (`traefik-gateway`) and GatewayClass
+- `gateway.enabled: true` — chart creates a Gateway and GatewayClass
+- `gateway.name: traefik-gateway` — explicit name avoids ambiguity (chart default may vary by version)
 - `gateway.listeners.websecure.hostname: "*.catinthehack.ca"` — wildcard listener
 - `gateway.listeners.websecure.certificateRefs` — references the TLS Secret created by cert-manager
 - `gateway.listeners.websecure.namespacePolicy.from: All` — HTTPRoutes from any namespace can attach
 - `ingressRoute.dashboard.enabled: false` — we expose the dashboard via HTTPRoute instead
-- `api.insecure: true` — dashboard accessible on internal API port 9000 (secure with SSO in step 13)
+- `api.insecure: true` — dashboard accessible on internal API port (secure with SSO in step 13)
 - `ports.web.hostPort: 80` / `ports.websecure.hostPort: 443` — bind directly to node
 - `ports.web.redirections` — HTTP→HTTPS permanent redirect at the entrypoint level
 - `service.type: ClusterIP` — no LoadBalancer needed with hostPort
 - `dependsOn` — waits for cert-manager HelmRelease to be Ready before installing Traefik
+
+> **Review note — verify during implementation:** Three Helm chart values had conflicting reviewer findings. Before writing `helmrelease.yaml`, run `helm show values traefik/traefik --version 38.0.2` and verify:
+>
+> 1. **Redirect syntax** — Plan uses `ports.web.redirections.entryPoint.to: websecure`. Alternate form: `ports.web.redirectTo.port: websecure`. Check which key the chart actually supports.
+> 2. **Dashboard API port** — Plan uses port 9000. Alternate: port 8080. Check `ports.traefik.port` in default values.
+> 3. **Gateway default name** — Plan sets `gateway.name: traefik-gateway` explicitly. Confirm the chart accepts this key and what the default would be without it.
 
 **Step 4: Create kustomization.yaml**
 
@@ -547,9 +561,9 @@ spec:
           port: 9000
 ```
 
-Routes `traefik.catinthehack.ca` to the Traefik API/dashboard service on port 9000. The Gateway name `traefik-gateway` is the default created by the Helm chart.
+Routes `traefik.catinthehack.ca` to the Traefik API/dashboard service. The Gateway name `traefik-gateway` is set explicitly in the HelmRelease values.
 
-After deployment, verify the Service port: `kubectl get svc -n traefik traefik -o yaml`. If the API port differs from 9000, update the backendRef.
+> **Review note — verify during implementation:** The dashboard backendRef port (9000 above) and Gateway name should match the actual chart defaults. Run `helm show values traefik/traefik --version 38.0.2` and check `ports.traefik.port` and `gateway.name` before writing this file. After deployment, confirm with: `kubectl get svc -n traefik traefik -o yaml`.
 
 **Step 2: Update kustomization.yaml**
 
@@ -599,7 +613,7 @@ Add to the Key Files table:
 
 Add to Implementation Notes:
 
-- **Gateway API CRDs**: Vendored from `kubernetes-sigs/gateway-api` v1.4.1 (`standard-install.yaml`). Installed as raw YAML before components that create Gateway or HTTPRoute resources. Flux's kustomize-controller does not support remote HTTP URLs in Kustomize resources, so the file is committed to the repo.
+- **Gateway API CRDs**: Vendored from `kubernetes-sigs/gateway-api` v1.4.1 (`standard-install.yaml`). Installed as raw YAML before components that create Gateway or HTTPRoute resources. Flux's kustomize-controller discourages remote HTTP URLs for source provenance, so the file is committed to the repo.
 - **cert-manager DNS-01**: DigitalOcean DNS provider for Let's Encrypt challenges. The SOPS-encrypted API token (`secret.enc.yaml`) lives in the cert-manager directory. The ClusterIssuer is cluster-scoped; cert-manager looks for the token Secret in the cert-manager namespace.
 - **Traefik Gateway API**: Gateway and GatewayClass created by the Helm chart (`gateway.enabled: true`). Default Gateway name is `traefik-gateway`. HTTPRoutes from any namespace can attach (`namespacePolicy.from: All`). Dashboard exposed via HTTPRoute — secure with SSO in step 13.
 - **hostPort binding**: Traefik binds to node ports 80 and 443 via hostPort (mapped from container ports 8000 and 8443). No LoadBalancer or MetalLB needed. HTTP→HTTPS redirect at the entrypoint level, before Gateway routing.
