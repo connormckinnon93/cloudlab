@@ -28,7 +28,7 @@ mise run flux:sops-key    # Load age key into cluster for SOPS decryption
 
 | File | Purpose |
 |------|---------|
-| `.mise.toml` | Tool versions (terraform, talosctl, sops, age, kubectl, tflint, lefthook) and tasks |
+| `.mise.toml` | Tool versions (terraform, talosctl, sops, age, kubectl, tflint, lefthook, gitleaks, kustomize, kubeconform, flux2, helm) and tasks |
 | `.sops.yaml` | SOPS encryption rules — age key, file patterns |
 | `terraform/versions.tf` | Required providers and version constraints |
 | `terraform/variables.tf` | Variable declarations for VM and cluster config |
