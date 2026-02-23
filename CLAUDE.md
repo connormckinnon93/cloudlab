@@ -154,6 +154,7 @@ Patterns learned from building this project that apply to all future work.
 - **Main is protected.** All changes require a PR with passing CI. Never commit directly to main.
 - **Merge, never rebase** when a feature branch falls behind main. Rebase rewrites history and requires force push. `git merge origin/main --no-edit` keeps a clean push.
 - **Commit design docs on the feature branch**, not main. Committing to main before branching causes divergence that must be resolved after the PR merges.
+- **Use `gh pr checks <number> --watch` to wait for CI.** Don't poll manually with `sleep` — `--watch` blocks until all checks complete and exits with the correct status code.
 
 ### SOPS secrets
 - **Create secrets with placeholder values**, encrypt them, and commit. Document what the user must fill in and how (`mise run sops:edit <path>`). This lets CI validate the resource structure while real credentials arrive later.
