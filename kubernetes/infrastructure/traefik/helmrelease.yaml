@@ -49,7 +49,6 @@ spec:
         enabled: false
     api:
       dashboard: true
-      insecure: true
     ports:
       web:
         port: 8000
@@ -62,9 +61,6 @@ spec:
       websecure:
         port: 8443
         hostPort: 443
-      traefik:
-        expose:
-          default: true
     service:
       type: ClusterIP
     resources:
