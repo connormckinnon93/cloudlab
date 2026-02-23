@@ -1,0 +1,15 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: skip-forward-auth
+policies:
+  - ../../../kubernetes/cluster-policies/clusterpolicy-inject-forward-auth.yaml
+resources:
+  - resource.yaml
+results:
+  - policy: inject-authentik-forward-auth
+    rule: add-forward-auth-middleware
+    resources:
+      - authentik
+    kind: HTTPRoute
+    result: skip
