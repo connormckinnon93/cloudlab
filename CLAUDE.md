@@ -44,9 +44,11 @@ mise run flux:sops-key    # Load age key into cluster for SOPS decryption
 | `kubernetes/flux-system/` | Auto-generated Flux controllers and sync config |
 | `kubernetes/flux-system/infrastructure.yaml` | Flux Kustomization CRD — reconciles `kubernetes/infrastructure/` |
 | `kubernetes/flux-system/apps.yaml` | Flux Kustomization CRD — reconciles `kubernetes/apps/` |
+| `kubernetes/flux-system/cluster-policies.yaml` | Flux Kustomization CRD — reconciles `kubernetes/cluster-policies/` (depends on infrastructure) |
 | `kubernetes/infrastructure/kustomization.yaml` | Kustomize entry point for cluster services |
 | `kubernetes/infrastructure/nfs-provisioner/` | NFS dynamic volume provisioner (Flux HelmRelease) |
 | `kubernetes/infrastructure/kyverno/` | Kyverno policy engine (Flux HelmRelease) |
+| `kubernetes/cluster-policies/` | Kyverno ClusterPolicies (applied after infrastructure CRDs exist) |
 | `kubernetes/apps/kustomization.yaml` | Kustomize entry point for workloads (empty until step 14+) |
 
 ## Providers
@@ -97,7 +99,7 @@ Three validation contexts: lefthook runs a fast subset on pre-commit (terraform 
 - **VM IP bootstrapping**: `talos_machine_configuration_apply` connects to the VM's DHCP address (via QEMU guest agent `ipv4_addresses`), not the static IP being configured. Post-reboot resources (bootstrap, kubeconfig) use the static IP.
 - **SOPS creation rules**: Files must match `\.enc\.(json|yaml)$` pattern. The `config:export` task writes directly to `.enc.yaml` filenames and uses `sops encrypt -i` (in-place)
 - **Mise task args**: Use `usage` field with `var=#true` for optional arguments (not `arg()` template function)
-- **Flux Kustomization hierarchy**: Flux CRDs (`infrastructure.yaml`, `apps.yaml`) live in `kubernetes/flux-system/` and are listed in its Kustomize `kustomization.yaml`. Target directories (`infrastructure/`, `apps/`) have their own Kustomize `kustomization.yaml` with resource lists. This avoids the naming conflict between Flux Kustomization CRDs and Kustomize's `kustomization.yaml`. The `flux-system` Kustomization CRD watches `path: ./kubernetes` — a root `kubernetes/kustomization.yaml` scopes it to `flux-system/` so it never encounters encrypted files meant for `infrastructure` or `apps`.
+- **Flux Kustomization hierarchy**: Flux CRDs (`infrastructure.yaml`, `cluster-policies.yaml`, `apps.yaml`) live in `kubernetes/flux-system/` and are listed in its Kustomize `kustomization.yaml`. Target directories (`infrastructure/`, `cluster-policies/`, `apps/`) have their own Kustomize `kustomization.yaml` with resource lists. The dependency chain is `flux-system → infrastructure → cluster-policies` and `flux-system → infrastructure → apps`. Policies are separated from infrastructure because CRD-based resources (like Kyverno ClusterPolicy) cannot be applied in the same Kustomization as the HelmRelease that installs their CRDs — Flux's server-side dry-run rejects unknown kinds, deadlocking the reconciliation.
 - **`mise run check` scope**: The `check` task runs from the project root (not `dir = "terraform"`). Terraform commands run in a subshell. Kubernetes validation is guarded by `[ -d kubernetes ]` and skips if the directory doesn't exist.
 - **SOPS age key in cluster**: The `sops-age` Secret in `flux-system` provides the age private key to kustomize-controller for SOPS decryption. Created via `mise run flux:sops-key` — not managed by Terraform to keep the private key out of state. Re-run after cluster rebuild.
 - **NFS provisioner pattern**: Infrastructure components follow a consistent directory structure under `kubernetes/infrastructure/`: dedicated namespace, HelmRepository, HelmRelease, and a Kustomize entry point. The parent `infrastructure/kustomization.yaml` references each component by directory name. This pattern repeats for ingress, cert-manager, and monitoring.
