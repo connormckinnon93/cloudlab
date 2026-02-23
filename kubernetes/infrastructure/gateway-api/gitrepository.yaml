@@ -7,5 +7,5 @@ spec:
   interval: 24h
   ref:
     # Pin to exact commit (v1.4.1 release). Update this to upgrade Gateway API CRDs.
-    commit: 062b039bc61f68334198240553a4ac9053074a7d  # v1.4.1
+    commit: 477d172e6ac5eccb82b65781ddb8f924afec4170  # v1.4.1
   url: https://github.com/kubernetes-sigs/gateway-api
