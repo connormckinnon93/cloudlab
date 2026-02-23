@@ -71,7 +71,7 @@ Both layers depend on infrastructure and reconcile in parallel.
 | AdGuard Home | DNS server with ad-blocking, backed by Unbound recursive resolver |
 | CloudNativePG | PostgreSQL operator — manages clusters, backups, and failover |
 | PostgreSQL | Shared database instance via CloudNativePG (single instance on NFS) |
-| Authentik | Identity provider with forward-auth proxy outpost for SSO across all services |
+| Authentik | Identity provider with Kubernetes-managed proxy outpost for SSO across all services |
 
 ### Cluster policies
 
