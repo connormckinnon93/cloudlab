@@ -1,0 +1,23 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: inject-authentik-forward-auth
+spec:
+  rules:
+    - name: add-forward-auth-middleware
+      match:
+        any:
+          - resources:
+              kinds:
+                - HTTPRoute
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  auth.catinthehack.ca/skip: "true"
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            annotations:
+              traefik.io/middleware: authentik-authentik-forward-auth@kubernetescrd
