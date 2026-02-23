@@ -29,9 +29,16 @@ spec:
             - containerPort: 9443
               name: https
               protocol: TCP
-          envFrom:
-            - secretRef:
-                name: authentik-outpost-api
+          env:
+            - name: AUTHENTIK_HOST
+              value: http://authentik-server.authentik.svc:80
+            - name: AUTHENTIK_INSECURE
+              value: "true"
+            - name: AUTHENTIK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-outpost-api
+                  key: AUTHENTIK_TOKEN
           readinessProbe:
             httpGet:
               path: /outpost.goauthentik.io/ping
