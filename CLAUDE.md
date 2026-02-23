@@ -54,6 +54,7 @@ mise run flux:sops-key    # Load age key into cluster for SOPS decryption
 | `kubernetes/infrastructure/gateway-api/` | Gateway API CRDs (v1.4.1, vendored) |
 | `kubernetes/infrastructure/cert-manager/` | cert-manager with DNS-01 via DigitalOcean |
 | `kubernetes/infrastructure/traefik/` | Traefik ingress with Gateway API, wildcard TLS |
+| `kubernetes/infrastructure/adguard/` | AdGuard Home DNS + Unbound recursive resolver |
 
 ## Providers
 
@@ -118,3 +119,7 @@ Three validation contexts: lefthook runs a fast subset on pre-commit (terraform 
 - **Traefik chart v38 redirect syntax**: The `redirectTo` property was removed from the values schema. Use `redirections.entryPoint.to` instead (see `ports.web.redirections` in helmrelease.yaml).
 - **Cross-namespace HTTPRoute**: Routes in app namespaces reference the Gateway with `parentRefs: [{name: traefik-gateway, namespace: traefik}]`. The Gateway permits this via `namespacePolicy.from: All`. Each app needs its own subdomain under `*.catinthehack.ca` — the wildcard cert covers all of them.
 - **App deployment pattern**: The whoami app (`kubernetes/apps/whoami/`) is the template for future services: namespace, Deployment, Service, HTTPRoute, and a Kustomize entry point. Register each app directory in `kubernetes/apps/kustomization.yaml`.
+- **AdGuard Home DNS**: Network DNS server with ad-blocking and DNS rewrite (`*.catinthehack.ca -> 192.168.20.100`). Uses `hostNetwork: true` to bind port 53 on the node IP and `dnsPolicy: ClusterFirstWithHostNet` to route the pod's DNS through CoreDNS instead of the node's resolver. The `adguard` namespace requires `privileged` PSA, same as `traefik`.
+- **Unbound recursive resolver**: AdGuard Home's sole upstream. Queries root nameservers directly; no third-party forwarders. ClusterIP service only — not exposed outside the cluster. DNSSEC validation enabled.
+- **AdGuard Home config seeding**: The gabe565 Helm chart generates a ConfigMap from the `config` values key and copies it to the config PVC on first boot only; subsequent restarts preserve UI changes. Flux injects the admin password (bcrypt hash) via `valuesFrom` from a SOPS-encrypted Secret, deep-merged into chart values before Helm renders the config.
+- **DNS circular dependency avoidance**: AdGuard Home runs on `hostNetwork` with `ClusterFirstWithHostNet` DNS policy. The pod resolves `unbound.adguard.svc.cluster.local` via CoreDNS, which forwards non-cluster queries to TalosOS Host DNS. TalosOS Host DNS uses `machine.network.nameservers` (static, set in Terraform) rather than DHCP-acquired DNS — this breaks the loop when router DHCP points at AdGuard Home. **Prerequisite:** `machine.network.nameservers` must be set to external resolvers (e.g., `1.1.1.1`, `8.8.8.8`) before changing router DHCP, or a node restart will deadlock.

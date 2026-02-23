@@ -95,7 +95,7 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 | ~~Flux repo structure~~ | ~~2~~ | ~~Monorepo~~ (chosen) ~~vs separate GitOps repo~~ |
 | ~~NFS provisioner~~ | ~~4~~ | ~~nfs-subdir-external-provisioner~~ (chosen) ~~vs democratic-csi~~ |
 | ~~Ingress approach~~ | ~~5~~ | ~~Traefik + Gateway API~~ (chosen) |
-| Service domain | 7 | `*.home.arpa`, `*.cloudlab.local`, or a real domain with split-horizon DNS |
+| ~~Service domain~~ | ~~7~~ | ~~`*.home.arpa`, `*.cloudlab.local`, or a real domain with split-horizon DNS~~ — `*.catinthehack.ca` with AdGuard Home DNS rewrite (chosen) |
 | Auth architecture | 12 | Authelia (lightweight forward-auth) vs Authentik (full OIDC identity provider) |
 | VCS platform | 13 | Gitea vs Forgejo |
 | Secrets manager | 15 | Infisical self-hosted vs other |
@@ -108,7 +108,7 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 4. ~~**NFS storage provisioner** — Dynamic PersistentVolumes backed by Synology NAS~~
 5. ~~**Ingress controller** — Route external HTTP/HTTPS traffic to cluster services~~
 6. ~~**cert-manager** — Automated TLS certificates via Let's Encrypt~~
-7. **Internal DNS** — Resolve friendly service names to the ingress IP
+7. ~~**Internal DNS** — Resolve friendly service names to the ingress IP~~
 8. **Monitoring** — Prometheus + Grafana for metrics, dashboards, and cluster health
 
 ### Phase 2: Operational Excellence
