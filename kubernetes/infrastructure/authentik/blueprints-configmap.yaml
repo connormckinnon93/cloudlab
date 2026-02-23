@@ -39,8 +39,9 @@ data:
           name: traefik-outpost
         attrs:
           type: proxy
+          service_connection: !Find [authentik_outposts.kubernetesserviceconnection, [name, Local Kubernetes Cluster]]
           providers:
             - !Find [authentik_providers_proxy.proxyprovider, [name, traefik-forward-auth]]
           config:
             authentik_host: http://authentik-server.authentik.svc:80
-            kubernetes_disabled: true
+            kubernetes_namespace: authentik
