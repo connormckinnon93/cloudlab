@@ -10,9 +10,5 @@ terraform {
       source  = "siderolabs/talos"
       version = "~> 0.10.0"
     }
-    sops = {
-      source  = "carlpett/sops"
-      version = "~> 1.3"
-    }
   }
 }
