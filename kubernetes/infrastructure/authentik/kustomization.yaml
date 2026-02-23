@@ -7,7 +7,4 @@ resources:
   - blueprints-configmap.yaml
   - helmrelease.yaml
   - httproute.yaml
-  - outpost-secret.enc.yaml
-  - outpost-deployment.yaml
-  - outpost-service.yaml
   - outpost-httproute.yaml

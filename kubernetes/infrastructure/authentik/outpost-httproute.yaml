@@ -17,5 +17,5 @@ spec:
             type: PathPrefix
             value: /outpost.goauthentik.io
       backendRefs:
-        - name: authentik-outpost
+        - name: ak-outpost-traefik-outpost
           port: 9000
