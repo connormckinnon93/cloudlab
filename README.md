@@ -81,6 +81,11 @@ Secrets are encrypted with SOPS (age backend) and stored in git. The SOPS Terraf
 | tflint | Terraform linting |
 | lefthook | Git pre-commit hooks |
 | Mise | Tool version management and task runner |
+| Kyverno CLI | Policy testing (offline) |
+| Chainsaw | E2E tests against live cluster |
+| Trivy | Security misconfiguration scanning |
+| Pluto | Deprecated API detection |
+| kube-linter | Kubernetes best-practice linting |
 
 ## Roadmap
 

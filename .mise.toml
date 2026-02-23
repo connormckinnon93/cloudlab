@@ -81,7 +81,7 @@ trivy config --severity HIGH,CRITICAL --ignorefile .trivyignore kubernetes/
 echo "==> Pluto"
 pluto detect-files -d kubernetes/ --ignore-deprecations --ignore-removals --target-versions k8s=v1.32.0
 echo "==> kube-linter"
-kube-linter lint kubernetes/ --config .kube-linter.yaml || true  # Advisory until securityContext added to whoami + outpost
+kube-linter lint kubernetes/ --config .kube-linter.yaml || true  # Advisory — Helm-managed resources may trigger false positives
 """
 
 [tasks.e2e]
