@@ -22,6 +22,7 @@ spec:
         - imageReferences:
             - "ghcr.io/fluxcd/*"
             - "ghcr.io/kyverno/*"
+          mutateDigest: false
           failureAction: Audit
           attestors:
             - entries:
