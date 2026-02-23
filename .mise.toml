@@ -49,8 +49,9 @@ if [ -d kubernetes ]; then
   for dir in kubernetes/*/; do
     if [ -f "${dir}kustomization.yaml" ]; then
       echo "    $dir"
-      # Strip SOPS metadata blocks (kubeconform rejects the non-standard sops: key)
-      kustomize build "$dir" | awk '/^sops:/{s=1;next} s&&/^[^[:space:]]/{s=0} !s' | kubeconform -strict -summary -ignore-missing-schemas \
+      # Strip SOPS metadata blocks (kubeconform rejects the non-standard sops: key).
+      # Uses explicit {print} instead of bare !s for macOS awk compatibility.
+      kustomize build "$dir" | awk 'BEGIN{s=0} /^sops:/{s=1;next} s==1&&/^[^[:space:]]/{s=0} s==0{print}' | kubeconform -strict -summary -ignore-missing-schemas \
         -schema-location default \
         -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{% raw %}{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}{% endraw %}.json'
     fi
