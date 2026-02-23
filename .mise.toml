@@ -51,7 +51,13 @@ if [ -d kubernetes ]; then
 fi
 echo "==> Gitleaks"
 gitleaks git
+echo "==> Tests"
+bash tests/run-all.sh
 """
+
+[tasks.test]
+description = "Run project tests"
+run = "bash tests/run-all.sh"
 
 [tasks."config:export"]
 description = "Extract and encrypt talosconfig and kubeconfig"
