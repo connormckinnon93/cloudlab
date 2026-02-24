@@ -53,3 +53,13 @@ spec:
       env:
         - name: AUTHENTIK_ERROR_REPORTING__ENABLED
           value: "false"
+        - name: HEADLAMP_OIDC_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: authentik-secrets
+              key: HEADLAMP_OIDC_CLIENT_ID
+        - name: HEADLAMP_OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: authentik-secrets
+              key: HEADLAMP_OIDC_CLIENT_SECRET
