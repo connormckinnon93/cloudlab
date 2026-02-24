@@ -72,6 +72,7 @@ mise run dns:unset        # Revert local DNS to DHCP defaults
 | `kubernetes/cluster-policies/clusterpolicy-inject-forward-auth.yaml` | Kyverno policy: auto-inject forward-auth on all HTTPRoutes |
 | `tests/kyverno/` | Kyverno CLI policy tests (forward-auth injection + skip) |
 | `tests/e2e/` | Chainsaw E2E tests against live cluster (Flux health, DNS, TLS, auth) |
+| `kubernetes/apps/headlamp/` | Headlamp Kubernetes dashboard (cluster-admin, Authentik OIDC) |
 | `.kube-linter.yaml` | kube-linter configuration and exclusions |
 | `.trivyignore` | Trivy false-positive exclusions |
 
@@ -165,6 +166,12 @@ Three test tiers: static (`mise run check` — terraform test, kyverno CLI, kube
 - **Bitnami Helm charts frozen**: Docker Hub OCI registry (`oci://registry-1.docker.io/bitnamicharts`) stopped receiving updates August 2025. Container images also frozen. Use alternative charts (CloudNativePG for PostgreSQL) or pin to last available versions with image overrides.
 
 - **Local DNS tasks**: `dns:set` and `dns:unset` configure macOS DNS on Ethernet, USB LAN, and Wi-Fi interfaces. Requires AdGuard Home running at `192.168.20.100`. Use `dns:unset` to revert to DHCP if DNS breaks. Both tasks print verification output after applying changes.
+- **Pushover notification templates**: HelmRelease values are data, not Helm templates. Use direct Go template syntax (`{{ .CommonLabels.alertname }}`) in Alertmanager receiver configs — do NOT escape with `{{ "{{" }}`. Named templates defined in `alertmanager.templateFiles` keep the receiver config clean.
+- **Grafana dashboard provisioning**: Dashboards defined as JSON inside ConfigMaps labeled `grafana_dashboard: "1"`. Grafana's sidecar auto-discovers them in the monitoring namespace. Same mechanism as datasource auto-discovery.
+- **Headlamp OIDC auth**: Headlamp supports native OIDC via `config.oidc` in the Helm values. Configured to authenticate against Authentik (`issuerURL: https://auth.catinthehack.ca/application/o/headlamp/`). OIDC credentials stored in a SOPS-encrypted Secret, injected via `valuesFrom`. Kyverno forward-auth still applies to the HTTPRoute, but the OIDC login replaces the manual ServiceAccount token flow.
+- **Headlamp cluster-admin RBAC**: Uses `cluster-admin` ClusterRole via `clusterRoleBinding.clusterRoleName: cluster-admin`. Full visibility into all resources including CRDs. The Helm chart deduplicates the ServiceAccount name when release name matches chart name — SA is `headlamp`, not `headlamp-headlamp`.
+- **TalosOS writable partition**: TalosOS uses a read-only squashfs root (`/`). The writable partition is `/var`. Node-exporter excludes squashfs and overlay filesystems, so `mountpoint="/"` produces no data. Use `mountpoint="/var"` for disk space alerts and dashboard panels.
+- **Grafana datasource UIDs**: Auto-generated UIDs are not deterministic and don't match human-readable names. Always set `uid` explicitly in datasource provisioning ConfigMaps (e.g., `uid: loki`). Dashboard JSON references datasources by `{"uid": "loki"}` — without the explicit UID, panels show "datasource not found".
 
 ## Deployment Lessons
 
@@ -218,3 +225,8 @@ Patterns learned from building this project that apply to all future work.
 - **Bitnami charts are frozen — plan alternatives.** Docker Hub OCI registry stopped publishing Bitnami charts and images in August 2025. CloudNativePG replaces Bitnami PostgreSQL. Future services needing Redis should evaluate alternatives (Dragonfly, KeyDB, or upstream Redis charts).
 - **Set `authentik_host_browser` when `authentik_host` is internal.** The outpost uses `authentik_host` for API communication and browser redirects. When `authentik_host` points to an in-cluster service name, the browser receives an unresolvable URL. Set `authentik_host_browser` to the external URL (`https://auth.catinthehack.ca`) in the outpost blueprint's `config` block. Both fields are required whenever internal and external URLs differ.
 - **Outpost pod restarts invalidate in-flight auth flows.** The proxy outpost stores OAuth state in ephemeral filesystem sessions. Restarting the pod wipes all sessions — any user mid-login receives a 400 "mismatched session ID" error because the callback's state JWT references a destroyed session. After outpost restarts, tell affected users to retry from scratch (clear cookies or incognito). Restart the outpost pod after blueprint changes: `kubectl rollout restart deploy/ak-outpost-traefik-outpost -n authentik`.
+
+### Alerting and notifications
+- **Do not escape Go templates in HelmRelease values.** `{{ "{{" }}` is Helm chart template escaping, not HelmRelease values escaping. Values are data — Flux and Helm pass them through without template processing. Use `{{ .CommonLabels.alertname }}` directly. The double-escaping produces literal template text in Alertmanager output.
+- **Use `templateFiles` for complex Alertmanager notification formatting.** Define named templates in `alertmanager.templateFiles` and reference them via `{{ template "name" . }}` in receiver configs. Cleaner than inline template logic.
+- **Start with few alert rules and expand.** A noisy alerting setup trains operators to ignore alerts. Begin with 8-10 rules covering critical failures (node down, disk full, crash loops), then add warning-tier rules based on observed gaps.
