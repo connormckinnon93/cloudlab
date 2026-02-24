@@ -83,6 +83,62 @@ spec:
                 annotations:
                   summary: "Certificate {{ $labels.name }} expires in less than 7 days"
                   description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} expires in {{ $value | humanizeDuration }}."
+      node-rules:
+        groups:
+          - name: node.rules
+            rules:
+              - alert: NodeNotReady
+                expr: kube_node_status_condition{job="kube-state-metrics",condition="Ready",status="true"} == 0
+                for: 2m
+                labels:
+                  severity: critical
+                annotations:
+                  summary: "Node {{ $labels.node }} is not ready"
+                  description: "Node {{ $labels.node }} has been not ready for more than 2 minutes. Single-node cluster — total outage."
+              - alert: NodeFilesystemSpaceCritical
+                expr: (node_filesystem_avail_bytes{job="node-exporter",mountpoint="/var",fstype!=""} / node_filesystem_size_bytes{job="node-exporter",mountpoint="/var",fstype!=""}) * 100 < 10
+                for: 5m
+                labels:
+                  severity: critical
+                annotations:
+                  summary: "Ephemeral disk on {{ $labels.instance }} has less than 10% space"
+                  description: "Ephemeral disk (/var) on {{ $labels.instance }} is {{ printf \"%.1f\" $value }}% free."
+              - alert: NodeMemoryPressure
+                expr: (node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"}) * 100 < 10
+                for: 5m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Node {{ $labels.instance }} has less than 10% memory available"
+                  description: "Node {{ $labels.instance }} has {{ printf \"%.1f\" $value }}% memory available. OOMKiller may evict pods."
+      workload-rules:
+        groups:
+          - name: workload.rules
+            rules:
+              - alert: PodCrashLooping
+                expr: max_over_time(kube_pod_container_status_waiting_reason{job="kube-state-metrics",reason="CrashLoopBackOff"}[5m]) >= 1
+                for: 5m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash-looping"
+                  description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} is in CrashLoopBackOff."
+              - alert: PodNotReady
+                expr: kube_pod_status_phase{job="kube-state-metrics",phase=~"Pending|Unknown|Failed"} * on(pod,namespace) group_left() (kube_pod_owner{job="kube-state-metrics",owner_kind!="Job"} or kube_pod_info{job="kube-state-metrics"} unless on(pod,namespace) kube_pod_owner{job="kube-state-metrics"}) > 0
+                for: 10m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is stuck in {{ $labels.phase }}"
+                  description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been {{ $labels.phase }} for more than 10 minutes."
+              - alert: PVCNearlyFull
+                expr: (kubelet_volume_stats_used_bytes{job="kubelet"} / kubelet_volume_stats_capacity_bytes{job="kubelet"}) * 100 > 85 and kubelet_volume_stats_used_bytes{job="kubelet"} > 0
+                for: 5m
+                labels:
+                  severity: warning
+                annotations:
+                  summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is over 85% full"
+                  description: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ printf \"%.1f\" $value }}% used."
 
     alertmanager:
       alertmanagerSpec:
@@ -103,6 +159,14 @@ spec:
                   storage: 1Gi
         secrets:
           - monitoring-secrets
+      templateFiles:
+        pushover.tmpl: |-
+          {{ define "pushover.title" }}[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}{{ end }}
+          {{ define "pushover.message" }}{{ range .Alerts }}{{ .Annotations.summary }}{{ if .Annotations.description }}
+          {{ .Annotations.description }}{{ end }}{{ if .Labels.namespace }}
+          Namespace: {{ .Labels.namespace }}{{ end }}{{ if .Labels.pod }}
+          Pod: {{ .Labels.pod }}{{ end }}
+          {{ end }}{{ end }}
       config:
         route:
           receiver: pushover-warning
@@ -128,15 +192,15 @@ spec:
               - user_key_file: /etc/alertmanager/secrets/monitoring-secrets/pushover-user-key
                 token_file: /etc/alertmanager/secrets/monitoring-secrets/pushover-api-token
                 priority: "1"
-                title: '{{ "{{" }} .CommonLabels.alertname {{ "}}" }}'
-                message: '{{ "{{" }} range .Alerts {{ "}}" }}{{ "{{" }} .Annotations.summary {{ "}}" }}{{ "{{" }} end {{ "}}" }}'
+                title: '{{ template "pushover.title" . }}'
+                message: '{{ template "pushover.message" . }}'
           - name: pushover-warning
             pushover_configs:
               - user_key_file: /etc/alertmanager/secrets/monitoring-secrets/pushover-user-key
                 token_file: /etc/alertmanager/secrets/monitoring-secrets/pushover-api-token
                 priority: "0"
-                title: '{{ "{{" }} .CommonLabels.alertname {{ "}}" }}'
-                message: '{{ "{{" }} range .Alerts {{ "}}" }}{{ "{{" }} .Annotations.summary {{ "}}" }}{{ "{{" }} end {{ "}}" }}'
+                title: '{{ template "pushover.title" . }}'
+                message: '{{ template "pushover.message" . }}'
 
     grafana:
       admin:

@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-log-explorer
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  log-explorer.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Log Volume",
+          "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+          "datasource": { "type": "loki", "uid": "loki" },
+          "targets": [
+            {
+              "expr": "sum by (container) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\"} |~ \"$search\" [1m]))",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "bars",
+                "stacking": { "mode": "normal" },
+                "fillOpacity": 80
+              }
+            },
+            "overrides": []
+          },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "type": "logs",
+          "title": "Log Stream",
+          "gridPos": { "h": 16, "w": 24, "x": 0, "y": 6 },
+          "datasource": { "type": "loki", "uid": "loki" },
+          "targets": [
+            {
+              "expr": "{namespace=~\"$namespace\", pod=~\"$pod\"} |~ \"$search\"",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": false,
+            "enableLogDetails": true,
+            "sortOrder": "Descending",
+            "dedupStrategy": "none"
+          }
+        }
+      ],
+      "refresh": "10s",
+      "schemaVersion": 39,
+      "tags": ["cloudlab", "logs"],
+      "templating": {
+        "list": [
+          {
+            "name": "namespace",
+            "type": "query",
+            "datasource": { "type": "loki", "uid": "loki" },
+            "query": { "label": "namespace", "type": 1 },
+            "refresh": 2,
+            "includeAll": true,
+            "allValue": ".+",
+            "current": { "text": "All", "value": "$__all" },
+            "sort": 1
+          },
+          {
+            "name": "pod",
+            "type": "query",
+            "datasource": { "type": "loki", "uid": "loki" },
+            "query": { "label": "pod", "type": 2, "stream": "{namespace=~\"$namespace\"}" },
+            "refresh": 2,
+            "includeAll": true,
+            "allValue": ".+",
+            "current": { "text": "All", "value": "$__all" },
+            "sort": 1
+          },
+          {
+            "name": "search",
+            "type": "textbox",
+            "current": { "text": "", "value": "" },
+            "label": "Search"
+          }
+        ]
+      },
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "Log Explorer",
+      "uid": "cloudlab-log-explorer"
+    }

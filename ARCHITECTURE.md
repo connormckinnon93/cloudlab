@@ -67,7 +67,7 @@ Both layers depend on infrastructure and reconcile in parallel.
 | Traefik | Ingress controller with Gateway API, hostPort binding on 80/443 |
 | NFS provisioner | Dynamic PersistentVolumes from Synology NAS |
 | Kyverno | Policy engine for image signature verification (audit mode) |
-| Monitoring | Prometheus, Grafana, Alertmanager, Loki, Alloy for observability |
+| Monitoring | Prometheus, Grafana (custom dashboards), Alertmanager (Pushover), Loki, Alloy |
 | AdGuard Home | DNS server with ad-blocking, backed by Unbound recursive resolver |
 | CloudNativePG | PostgreSQL operator — manages clusters, backups, and failover |
 | PostgreSQL | Shared database instance via CloudNativePG (single instance on NFS) |
@@ -85,6 +85,11 @@ A Traefik ForwardAuth Middleware (`middleware-forward-auth.yaml`) also lives in 
 ### Apps
 
 Each app follows the pattern: namespace, Deployment, Service, HTTPRoute, Kustomize entry point. The whoami app demonstrates this pattern. Register new apps in `kubernetes/apps/kustomization.yaml`.
+
+| App | Purpose |
+|-----|---------|
+| whoami | Smoke test — validates ingress, TLS, and Gateway routing |
+| Headlamp | Kubernetes dashboard for visual cluster browsing and triage (cluster-admin, Authentik OIDC) |
 
 ## Ingress and TLS
 
