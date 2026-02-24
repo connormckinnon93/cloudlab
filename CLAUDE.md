@@ -189,6 +189,9 @@ Patterns learned from building this project that apply to all future work.
 ### SOPS secrets
 - **Create secrets with placeholder values**, encrypt them, and commit. Document what the user must fill in and how (`mise run sops:edit <path>`). This lets CI validate the resource structure while real credentials arrive later.
 - **Collect credentials before starting implementation.** Asking mid-flow interrupts momentum. List prerequisites (accounts to create, keys to generate) in the plan and resolve them first.
+- **Use `sops set` to add keys without decrypting.** `sops set <file> '["stringData"]["KEY"]' '"value"'` modifies individual keys in an encrypted file without exposing other values to stdout. Safer than decrypt-edit-encrypt for automation and CI contexts. Use this when adding new keys to an existing Secret.
+- **Recreate SOPS files with placeholder-only content.** When a Secret contains only placeholder values (no real secrets yet), overwrite it with the real plaintext YAML and run `sops encrypt -i`. Simpler than `sops set` for each key, and no decryption occurs.
+- **Symlink `.age-key.txt` into worktrees.** The age key file is gitignored and absent from new worktrees. SOPS operations fail without it. Create a symlink to the main repo's key (`ln -s /path/to/main/.age-key.txt .age-key.txt`), run SOPS commands, then remove the symlink. Automate this in worktree setup scripts.
 
 ### Infrastructure-as-code
 - **Pin exact Helm chart versions at implementation time.** Plans should specify major version ranges (e.g., `82.x`). The implementing agent looks up the latest patch version when writing the HelmRelease.
