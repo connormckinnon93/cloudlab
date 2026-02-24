@@ -1,0 +1,19 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "flux": {
+    "managerFilePatterns": ["/kubernetes/.+\\.ya?ml$/"]
+  },
+  "packageRules": [
+    {
+      "description": "Group all Helm chart updates",
+      "matchDatasources": ["helm"],
+      "groupName": "helm charts"
+    },
+    {
+      "description": "Group all container image updates",
+      "matchDatasources": ["docker"],
+      "groupName": "container images"
+    }
+  ]
+}

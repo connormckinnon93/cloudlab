@@ -1,0 +1,44 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: renovate
+  namespace: renovate
+spec:
+  interval: 30m
+  timeout: 5m
+  chart:
+    spec:
+      chart: renovate
+      version: "46.31.5"
+      interval: 60m
+      sourceRef:
+        kind: HelmRepository
+        name: renovatebot
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    cronjob:
+      schedule: "0 */6 * * *"
+
+    existingSecret: renovate-secrets
+
+    renovate:
+      config: |
+        {
+          "platform": "forgejo",
+          "endpoint": "http://forgejo-http.forgejo.svc:3000",
+          "repositories": ["forgejo_admin/cloudlab"],
+          "onboarding": false
+        }
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 256Mi
+      limits:
+        memory: 1Gi

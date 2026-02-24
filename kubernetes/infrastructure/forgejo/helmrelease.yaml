@@ -1,0 +1,105 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: forgejo
+  namespace: forgejo
+spec:
+  interval: 30m
+  timeout: 10m
+  dependsOn:
+    - name: postgres-cluster
+      namespace: postgres
+  chart:
+    spec:
+      chart: forgejo
+      version: "16.2.0"
+      interval: 60m
+      sourceRef:
+        kind: HelmRepository
+        name: forgejo-helm
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    fullnameOverride: forgejo
+
+    gitea:
+      admin:
+        existingSecret: forgejo-admin
+        email: admin@catinthehack.ca
+
+      config:
+        database:
+          DB_TYPE: postgres
+          HOST: postgres-cluster-rw.postgres.svc:5432
+          NAME: forgejo
+          USER: forgejo
+          SSL_MODE: disable
+
+        security:
+          INSTALL_LOCK: true
+
+        server:
+          DOMAIN: git.catinthehack.ca
+          ROOT_URL: https://git.catinthehack.ca/
+          SSH_DOMAIN: git.catinthehack.ca
+          SSH_PORT: "2222"
+          START_SSH_SERVER: true
+          LFS_START_SERVER: true
+
+        service:
+          DISABLE_REGISTRATION: true
+
+        actions:
+          ENABLED: true
+          DEFAULT_ACTIONS_URL: https://github.com
+
+        session:
+          PROVIDER: db
+          COOKIE_SECURE: true
+
+        cache:
+          ADAPTER: memory
+
+        queue:
+          TYPE: level
+
+      oauth:
+        - name: "Authentik"
+          provider: "openidConnect"
+          existingSecret: forgejo-oauth
+          autoDiscoverUrl: "http://authentik-server.authentik.svc:80/application/o/forgejo/.well-known/openid-configuration"
+          useCustomUrls: true
+          customAuthUrl: "https://auth.catinthehack.ca/application/o/authorize/"
+
+      additionalConfigSources:
+        - secret:
+            secretName: forgejo-db-config
+
+    persistence:
+      enabled: true
+      size: 10Gi
+      accessModes:
+        - ReadWriteOnce
+      storageClass: nfs
+      annotations:
+        helm.sh/resource-policy: keep
+
+    httpRoute:
+      enabled: false
+
+    service:
+      ssh:
+        type: ClusterIP
+        port: 2222
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
