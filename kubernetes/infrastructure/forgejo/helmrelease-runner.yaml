@@ -1,0 +1,59 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: forgejo-runner
+  namespace: forgejo
+spec:
+  interval: 30m
+  timeout: 5m
+  dependsOn:
+    - name: forgejo
+      namespace: forgejo
+  chart:
+    spec:
+      chart: forgejo-runner
+      version: "0.7.1"
+      interval: 60m
+      sourceRef:
+        kind: HelmRepository
+        name: forgejo-runner
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    replicaCount: 1
+
+    runner:
+      config:
+        create: true
+        existingInitSecret: forgejo-runner-config
+        file:
+          runner:
+            capacity: 1
+            timeout: 30m
+            labels:
+              - "ubuntu-latest:docker://catthehacker/ubuntu:act-latest"
+          container:
+            privileged: false
+            docker_host: "-"
+            valid_volumes: []
+            options: "--memory=1g --cpus=2"
+
+    dind:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          memory: 2Gi
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi

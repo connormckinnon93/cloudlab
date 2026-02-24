@@ -1,0 +1,9 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: forgejo-runner
+  namespace: forgejo
+spec:
+  type: oci
+  interval: 60m
+  url: oci://codeberg.org/wrenix/helm-charts
