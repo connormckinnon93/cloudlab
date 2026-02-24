@@ -9,3 +9,4 @@ resources:
   - helmrelease-loki.yaml
   - helmrelease-alloy.yaml
   - grafana-datasource-loki.yaml
+  - grafana-dashboard-cluster-health.yaml
