@@ -58,8 +58,8 @@ data:
           name: headlamp
         attrs:
           client_type: confidential
-          client_id: !Env [HEADLAMP_OIDC_CLIENT_ID]
-          client_secret: !Env [HEADLAMP_OIDC_CLIENT_SECRET]
+          client_id: !Env HEADLAMP_OIDC_CLIENT_ID
+          client_secret: !Env HEADLAMP_OIDC_CLIENT_SECRET
           authorization_flow: !Find [authentik_flows.flow, [slug, default-authentication-flow]]
           invalidation_flow: !Find [authentik_flows.flow, [slug, default-invalidation-flow]]
           redirect_uris: "https://headlamp.catinthehack.ca/oidc-callback"
