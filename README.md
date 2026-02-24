@@ -81,6 +81,8 @@ Secrets are encrypted with SOPS (age backend) and stored in git. The SOPS Terraf
 | tflint | Terraform linting |
 | lefthook | Git pre-commit hooks |
 | Mise | Tool version management and task runner |
+| Forgejo | Self-hosted Git forge with Actions CI |
+| Renovate | Automated dependency updates |
 | Kyverno CLI | Policy testing (offline) |
 | Chainsaw | E2E tests against live cluster |
 | Trivy | Security misconfiguration scanning |
@@ -102,7 +104,7 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 | ~~Ingress approach~~ | ~~5~~ | ~~Traefik + Gateway API~~ (chosen) |
 | ~~Service domain~~ | ~~7~~ | ~~`*.home.arpa`, `*.cloudlab.local`, or a real domain with split-horizon DNS~~ — `*.catinthehack.ca` with AdGuard Home DNS rewrite (chosen) |
 | ~~Auth architecture~~ | ~~12~~ | ~~Authentik~~ (chosen) |
-| VCS platform | 13 | Gitea vs Forgejo |
+| ~~VCS platform~~ | ~~13~~ | ~~Forgejo~~ (chosen) |
 | Secrets manager | 15 | Infisical self-hosted vs other |
 
 ### Phase 1: Foundation
@@ -122,8 +124,8 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 10. ~~**Alerting** — Alertmanager with Pushover notifications for critical and warning alerts~~
 11. ~~**Kyverno** — Image signature verification first, general policies later~~
 12. ~~**Authentication gateway** — Single sign-on and 2FA in front of all services~~
-13. **Gitea/Forgejo** — First self-hosted app; migrate Flux source from GitHub
-14. **Renovate** — Automated dependency updates (against Gitea)
+13. ~~**Forgejo** — Self-hosted Git forge with Actions CI, push mirror to GitHub, Flux source migration~~
+14. ~~**Renovate** — Automated dependency updates via CronJob against Forgejo~~
 15. **Infisical** — Self-hosted secrets management; begin migrating from SOPS
 
 ### Phase 3: Expand and Harden

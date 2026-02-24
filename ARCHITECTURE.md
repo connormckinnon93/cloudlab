@@ -72,6 +72,7 @@ Both layers depend on infrastructure and reconcile in parallel.
 | CloudNativePG | PostgreSQL operator — manages clusters, backups, and failover |
 | PostgreSQL | Shared database instance via CloudNativePG (single instance on NFS) |
 | Authentik | Identity provider with Kubernetes-managed proxy outpost for SSO across all services |
+| Forgejo | Self-hosted Git forge with Actions CI runner, push mirror to GitHub |
 
 ### Cluster policies
 
@@ -84,7 +85,12 @@ A Traefik ForwardAuth Middleware (`middleware-forward-auth.yaml`) also lives in 
 
 ### Apps
 
-Each app follows the pattern: namespace, Deployment, Service, HTTPRoute, Kustomize entry point. The whoami app demonstrates this pattern. Register new apps in `kubernetes/apps/kustomization.yaml`.
+| App | Purpose |
+|-----|---------|
+| whoami | Smoke test — validates ingress, TLS, and Gateway routing |
+| Renovate | Automated dependency updates via CronJob against Forgejo |
+
+Each app follows the pattern: namespace, Deployment/HelmRelease, Service, HTTPRoute (if externally exposed), Kustomize entry point. Register new apps in `kubernetes/apps/kustomization.yaml`.
 
 ## Ingress and TLS
 
