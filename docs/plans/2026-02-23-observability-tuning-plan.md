@@ -4,7 +4,7 @@
 
 **Goal:** Fix broken Pushover notifications, add essential alert rules, create two Grafana dashboards, and deploy Headlamp for cluster browsing.
 
-**Architecture:** All monitoring changes modify the existing kube-prometheus-stack HelmRelease. Dashboards are ConfigMaps auto-discovered by Grafana's sidecar. Headlamp deploys as a standalone app in `kubernetes/apps/headlamp/` with read-only RBAC.
+**Architecture:** All monitoring changes modify the existing kube-prometheus-stack HelmRelease. Dashboards are ConfigMaps auto-discovered by Grafana's sidecar. Headlamp deploys as a standalone app in `kubernetes/apps/headlamp/` with cluster-admin RBAC for full CRD visibility.
 
 **Tech Stack:** kube-prometheus-stack (Prometheus, Alertmanager, Grafana), Loki, Headlamp 0.40.0, Flux HelmRelease, Gateway API HTTPRoute
 
@@ -135,7 +135,7 @@ Add this YAML at the same indentation level as `flux-rules` and `cert-manager-ru
           - name: node.rules
             rules:
               - alert: NodeNotReady
-                expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+                expr: kube_node_status_condition{job="kube-state-metrics",condition="Ready",status="true"} == 0
                 for: 2m
                 labels:
                   severity: critical
@@ -143,15 +143,15 @@ Add this YAML at the same indentation level as `flux-rules` and `cert-manager-ru
                   summary: "Node {{ $labels.node }} is not ready"
                   description: "Node {{ $labels.node }} has been not ready for more than 2 minutes. Single-node cluster — total outage."
               - alert: NodeFilesystemSpaceCritical
-                expr: (node_filesystem_avail_bytes{mountpoint="/",fstype!=""} / node_filesystem_size_bytes{mountpoint="/",fstype!=""}) * 100 < 10
+                expr: (node_filesystem_avail_bytes{job="node-exporter",mountpoint="/var",fstype!=""} / node_filesystem_size_bytes{job="node-exporter",mountpoint="/var",fstype!=""}) * 100 < 10
                 for: 5m
                 labels:
                   severity: critical
                 annotations:
-                  summary: "Root filesystem on {{ $labels.instance }} has less than 10% space"
-                  description: "Root filesystem on {{ $labels.instance }} is {{ printf \"%.1f\" $value }}% free."
+                  summary: "Ephemeral disk on {{ $labels.instance }} has less than 10% space"
+                  description: "Ephemeral disk (/var) on {{ $labels.instance }} is {{ printf \"%.1f\" $value }}% free."
               - alert: NodeMemoryPressure
-                expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 < 10
+                expr: (node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"}) * 100 < 10
                 for: 5m
                 labels:
                   severity: warning
@@ -163,15 +163,15 @@ Add this YAML at the same indentation level as `flux-rules` and `cert-manager-ru
           - name: workload.rules
             rules:
               - alert: PodCrashLooping
-                expr: increase(kube_pod_container_status_restarts_total[10m]) > 3
+                expr: max_over_time(kube_pod_container_status_waiting_reason{job="kube-state-metrics",reason="CrashLoopBackOff"}[5m]) >= 1
                 for: 5m
                 labels:
                   severity: warning
                 annotations:
                   summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash-looping"
-                  description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} restarted {{ printf \"%.0f\" $value }} times in 10 minutes."
+                  description: "Container {{ $labels.container }} in pod {{ $labels.namespace }}/{{ $labels.pod }} is in CrashLoopBackOff."
               - alert: PodNotReady
-                expr: kube_pod_status_phase{phase=~"Pending|Unknown"} > 0
+                expr: kube_pod_status_phase{job="kube-state-metrics",phase=~"Pending|Unknown|Failed"} * on(pod,namespace) group_left() (kube_pod_owner{job="kube-state-metrics",owner_kind!="Job"} or kube_pod_info{job="kube-state-metrics"} unless on(pod,namespace) kube_pod_owner{job="kube-state-metrics"}) > 0
                 for: 10m
                 labels:
                   severity: warning
@@ -179,7 +179,7 @@ Add this YAML at the same indentation level as `flux-rules` and `cert-manager-ru
                   summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is stuck in {{ $labels.phase }}"
                   description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been {{ $labels.phase }} for more than 10 minutes."
               - alert: PVCNearlyFull
-                expr: (kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100 > 85
+                expr: (kubelet_volume_stats_used_bytes{job="kubelet"} / kubelet_volume_stats_capacity_bytes{job="kubelet"}) * 100 > 85 and kubelet_volume_stats_used_bytes{job="kubelet"} > 0
                 for: 5m
                 labels:
                   severity: warning
@@ -298,11 +298,11 @@ data:
         },
         {
           "type": "stat",
-          "title": "Root Disk Usage",
+          "title": "Ephemeral Disk Usage",
           "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 },
           "targets": [
             {
-              "expr": "(1 - node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"\"}) * 100",
+              "expr": "(1 - node_filesystem_avail_bytes{mountpoint=\"/var\",fstype!=\"\"} / node_filesystem_size_bytes{mountpoint=\"/var\",fstype!=\"\"}) * 100",
               "refId": "A"
             }
           ],
@@ -357,7 +357,7 @@ data:
           "gridPos": { "h": 4, "w": 6, "x": 6, "y": 6 },
           "targets": [
             {
-              "expr": "sum(kube_pod_status_phase{phase=~\"Pending|Unknown\"}) or vector(0)",
+              "expr": "sum(kube_pod_status_phase{phase=~\"Pending|Unknown|Failed\"}) or vector(0)",
               "refId": "A"
             }
           ],
@@ -381,7 +381,7 @@ data:
           "gridPos": { "h": 4, "w": 6, "x": 12, "y": 6 },
           "targets": [
             {
-              "expr": "count(increase(kube_pod_container_status_restarts_total[10m]) > 3) or vector(0)",
+              "expr": "count(max_over_time(kube_pod_container_status_waiting_reason{reason=\"CrashLoopBackOff\"}[5m]) >= 1) or vector(0)",
               "refId": "A"
             }
           ],
@@ -596,8 +596,8 @@ Expected: All checks pass. Kubeconform validates the new ConfigMap.
 git add kubernetes/infrastructure/monitoring/grafana-dashboard-cluster-health.yaml kubernetes/infrastructure/monitoring/kustomization.yaml
 git commit -m "feat(monitoring): add cluster health Grafana dashboard
 
-Single-pane overview: node vitals (CPU, memory, disk), workload status
-(pods running, not ready, crash-looping), PVC usage, Flux sync state."
+Single-pane overview: node vitals (CPU, memory, ephemeral disk), workload
+status (pods running, not ready, crash-looping), PVC usage, Flux sync state."
 ```
 
 ---
@@ -607,10 +607,35 @@ Single-pane overview: node vitals (CPU, memory, disk), workload status
 A Loki-backed dashboard for investigating alerts. Template variables for namespace, pod, and search text.
 
 **Files:**
+- Modify: `kubernetes/infrastructure/monitoring/grafana-datasource-loki.yaml`
 - Create: `kubernetes/infrastructure/monitoring/grafana-dashboard-log-explorer.yaml`
 - Modify: `kubernetes/infrastructure/monitoring/kustomization.yaml`
 
-**Step 1: Create the dashboard ConfigMap**
+**Step 1: Add UID to Loki datasource**
+
+The dashboard references Loki by `{"uid": "loki"}`. The current datasource ConfigMap has no explicit UID — Grafana auto-generates one that won't match. Add `uid: loki` to `kubernetes/infrastructure/monitoring/grafana-datasource-loki.yaml`:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-datasource
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  loki-datasource.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        uid: loki
+        access: proxy
+        url: http://loki.monitoring.svc:3100
+        isDefault: false
+```
+
+**Step 2: Create the dashboard ConfigMap**
 
 Create `kubernetes/infrastructure/monitoring/grafana-dashboard-log-explorer.yaml`:
 
@@ -638,7 +663,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "targets": [
             {
-              "expr": "sum by (level) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\"} |~ \"$search\" [1m]))",
+              "expr": "sum by (container) (count_over_time({namespace=~\"$namespace\", pod=~\"$pod\"} |~ \"$search\" [1m]))",
               "refId": "A"
             }
           ],
@@ -650,20 +675,7 @@ data:
                 "fillOpacity": 80
               }
             },
-            "overrides": [
-              {
-                "matcher": { "id": "byName", "options": "error" },
-                "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
-              },
-              {
-                "matcher": { "id": "byName", "options": "warn" },
-                "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }]
-              },
-              {
-                "matcher": { "id": "byName", "options": "info" },
-                "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
-              }
-            ]
+            "overrides": []
           },
           "options": { "tooltip": { "mode": "multi" } }
         },
@@ -702,7 +714,7 @@ data:
             "query": { "label": "namespace", "type": 1 },
             "refresh": 2,
             "includeAll": true,
-            "allValue": ".*",
+            "allValue": ".+",
             "current": { "text": "All", "value": "$__all" },
             "sort": 1
           },
@@ -710,10 +722,10 @@ data:
             "name": "pod",
             "type": "query",
             "datasource": { "type": "loki", "uid": "loki" },
-            "query": { "label": "pod", "type": 1, "stream": "{namespace=~\"$namespace\"}" },
+            "query": { "label": "pod", "type": 2, "stream": "{namespace=~\"$namespace\"}" },
             "refresh": 2,
             "includeAll": true,
-            "allValue": ".*",
+            "allValue": ".+",
             "current": { "text": "All", "value": "$__all" },
             "sort": 1
           },
@@ -731,7 +743,7 @@ data:
     }
 ```
 
-**Step 2: Register in kustomization.yaml**
+**Step 3: Register in kustomization.yaml**
 
 Add `grafana-dashboard-log-explorer.yaml` to the resource list:
 
@@ -751,36 +763,42 @@ resources:
   - grafana-dashboard-log-explorer.yaml
 ```
 
-**Step 3: Validate**
+**Step 4: Validate**
 
 Run: `mise run check`
 Expected: All checks pass.
 
-**Step 4: Commit**
+**Step 5: Commit**
 
 ```bash
-git add kubernetes/infrastructure/monitoring/grafana-dashboard-log-explorer.yaml kubernetes/infrastructure/monitoring/kustomization.yaml
+git add kubernetes/infrastructure/monitoring/grafana-datasource-loki.yaml kubernetes/infrastructure/monitoring/grafana-dashboard-log-explorer.yaml kubernetes/infrastructure/monitoring/kustomization.yaml
 git commit -m "feat(monitoring): add log explorer Grafana dashboard
 
-Loki-backed dashboard with namespace/pod/search filters. Log volume
-histogram and log stream panel for quick alert investigation."
+Add uid to Loki datasource for dashboard references. Loki-backed
+dashboard with namespace/pod/search filters. Log volume by container
+and log stream panel for quick alert investigation."
 ```
 
 ---
 
 ## Task 5: Deploy Headlamp
 
-Headlamp provides a web UI for browsing Kubernetes objects. Deployed as a HelmRelease in `kubernetes/apps/headlamp/` with read-only RBAC. Authentik forward-auth covers access via the Kyverno policy.
+Headlamp provides a web UI for browsing Kubernetes objects. Deployed as a HelmRelease in `kubernetes/apps/headlamp/` with cluster-admin RBAC for full CRD visibility. Headlamp supports native OIDC — configured to authenticate directly against Authentik, so no ServiceAccount token paste is needed. The HTTPRoute still gets Kyverno forward-auth injection, but Headlamp's own login is handled by OIDC.
 
 **Chart details:**
 - Repository: `https://kubernetes-sigs.github.io/headlamp/`
 - Chart: `headlamp`
 - Version: `0.40.0`
-- Key values: `clusterRoleBinding.clusterRoleName: view` for read-only
+- Key values: `clusterRoleBinding.clusterRoleName: cluster-admin` for full visibility, `config.oidc` for Authentik OIDC
+
+**Prerequisites:**
+- Create an OAuth2/OpenID provider in Authentik for Headlamp (client ID, client secret, issuer URL)
+- Store the OIDC client secret in a SOPS-encrypted Secret
 
 **Files:**
 - Create: `kubernetes/apps/headlamp/namespace.yaml`
 - Create: `kubernetes/apps/headlamp/helmrepository.yaml`
+- Create: `kubernetes/apps/headlamp/secret.enc.yaml`
 - Create: `kubernetes/apps/headlamp/helmrelease.yaml`
 - Create: `kubernetes/apps/headlamp/httproute.yaml`
 - Create: `kubernetes/apps/headlamp/kustomization.yaml`
@@ -812,7 +830,27 @@ spec:
   url: https://kubernetes-sigs.github.io/headlamp/
 ```
 
-**Step 3: Create HelmRelease**
+**Step 3: Create SOPS-encrypted Secret for OIDC credentials**
+
+Create `kubernetes/apps/headlamp/secret.enc.yaml` with placeholder values, then encrypt:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: headlamp-oidc
+  namespace: headlamp
+type: Opaque
+stringData:
+  HEADLAMP_CONFIG_OIDC_CLIENT_ID: "PLACEHOLDER"
+  HEADLAMP_CONFIG_OIDC_CLIENT_SECRET: "PLACEHOLDER"
+```
+
+After creating, encrypt in-place: `sops encrypt -i kubernetes/apps/headlamp/secret.enc.yaml`
+
+The user must fill in real values later: `mise run sops:edit kubernetes/apps/headlamp/secret.enc.yaml`
+
+**Step 4: Create HelmRelease**
 
 Create `kubernetes/apps/headlamp/helmrelease.yaml`:
 
@@ -843,9 +881,13 @@ spec:
   values:
     clusterRoleBinding:
       create: true
-      clusterRoleName: view
+      clusterRoleName: cluster-admin
     config:
-      inCluster: true
+      oidc:
+        clientID: "${HEADLAMP_CONFIG_OIDC_CLIENT_ID}"
+        clientSecret: "${HEADLAMP_CONFIG_OIDC_CLIENT_SECRET}"
+        issuerURL: "https://auth.catinthehack.ca/application/o/headlamp/"
+        scopes: "openid,profile,email"
     service:
       type: ClusterIP
       port: 80
@@ -854,15 +896,32 @@ spec:
       privileged: false
       runAsUser: 100
       runAsGroup: 101
+      allowPrivilegeEscalation: false
+      seccompProfile:
+        type: RuntimeDefault
+      capabilities:
+        drop:
+          - ALL
     resources:
       requests:
         cpu: 10m
         memory: 64Mi
       limits:
         memory: 128Mi
+  valuesFrom:
+    - kind: Secret
+      name: headlamp-oidc
+      valuesKey: HEADLAMP_CONFIG_OIDC_CLIENT_ID
+      targetPath: config.oidc.clientID
+    - kind: Secret
+      name: headlamp-oidc
+      valuesKey: HEADLAMP_CONFIG_OIDC_CLIENT_SECRET
+      targetPath: config.oidc.clientSecret
 ```
 
-**Step 4: Create HTTPRoute**
+Note: The `valuesFrom` entries override the placeholder `${...}` strings in `config.oidc` with actual Secret values at reconciliation time.
+
+**Step 5: Create HTTPRoute**
 
 Create `kubernetes/apps/headlamp/httproute.yaml`:
 
@@ -888,7 +947,7 @@ spec:
           port: 80
 ```
 
-**Step 5: Create kustomization.yaml**
+**Step 6: Create kustomization.yaml**
 
 Create `kubernetes/apps/headlamp/kustomization.yaml`:
 
@@ -898,11 +957,12 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - helmrepository.yaml
+  - secret.enc.yaml
   - helmrelease.yaml
   - httproute.yaml
 ```
 
-**Step 6: Register in apps kustomization**
+**Step 7: Register in apps kustomization**
 
 Update `kubernetes/apps/kustomization.yaml`:
 
@@ -914,19 +974,21 @@ resources:
   - headlamp
 ```
 
-**Step 7: Validate**
+**Step 8: Validate**
 
 Run: `mise run check`
 Expected: All checks pass. Kubeconform validates all new resources.
 
-**Step 8: Commit**
+**Step 9: Commit**
 
 ```bash
 git add kubernetes/apps/headlamp/ kubernetes/apps/kustomization.yaml
 git commit -m "feat(apps): deploy Headlamp Kubernetes dashboard
 
-Read-only cluster browser (view ClusterRole) behind Authentik forward-auth.
-Chart v0.40.0, accessible at headlamp.catinthehack.ca."
+Cluster browser with cluster-admin RBAC and Authentik OIDC login.
+Chart v0.40.0, accessible at headlamp.catinthehack.ca. OIDC credentials
+in SOPS-encrypted Secret — user must fill in after creating Authentik
+application."
 ```
 
 ---
@@ -945,7 +1007,7 @@ Update CLAUDE.md, ARCHITECTURE.md, and README.md to reflect the new components.
 Add to the **Key Files** table:
 
 ```
-| `kubernetes/apps/headlamp/` | Headlamp Kubernetes dashboard (read-only cluster browser) |
+| `kubernetes/apps/headlamp/` | Headlamp Kubernetes dashboard (cluster-admin, Authentik OIDC) |
 ```
 
 Add to **Implementation Notes**:
@@ -953,8 +1015,10 @@ Add to **Implementation Notes**:
 ```
 - **Pushover notification templates**: HelmRelease values are data, not Helm templates. Use direct Go template syntax (`{{ .CommonLabels.alertname }}`) in Alertmanager receiver configs — do NOT escape with `{{ "{{" }}`. Named templates defined in `alertmanager.templateFiles` keep the receiver config clean.
 - **Grafana dashboard provisioning**: Dashboards defined as JSON inside ConfigMaps labeled `grafana_dashboard: "1"`. Grafana's sidecar auto-discovers them in the monitoring namespace. Same mechanism as datasource auto-discovery.
-- **Headlamp auth**: Behind Authentik forward-auth via Kyverno policy. Headlamp's own login requires a ServiceAccount token — generate with `kubectl create token headlamp-headlamp -n headlamp --duration=8760h` and paste into the UI once. Browser stores the token in localStorage.
-- **Headlamp read-only RBAC**: Uses the built-in `view` ClusterRole via `clusterRoleBinding.clusterRoleName: view`. Read access to all namespaces, no write operations.
+- **Headlamp OIDC auth**: Headlamp supports native OIDC via `config.oidc` in the Helm values. Configured to authenticate against Authentik (`issuerURL: https://auth.catinthehack.ca/application/o/headlamp/`). OIDC credentials stored in a SOPS-encrypted Secret, injected via `valuesFrom`. Kyverno forward-auth still applies to the HTTPRoute, but the OIDC login replaces the manual ServiceAccount token flow.
+- **Headlamp cluster-admin RBAC**: Uses `cluster-admin` ClusterRole via `clusterRoleBinding.clusterRoleName: cluster-admin`. Full visibility into all resources including CRDs. The Helm chart deduplicates the ServiceAccount name when release name matches chart name — SA is `headlamp`, not `headlamp-headlamp`.
+- **TalosOS writable partition**: TalosOS uses a read-only squashfs root (`/`). The writable partition is `/var`. Node-exporter excludes squashfs and overlay filesystems, so `mountpoint="/"` produces no data. Use `mountpoint="/var"` for disk space alerts and dashboard panels.
+- **Grafana datasource UIDs**: Auto-generated UIDs are not deterministic and don't match human-readable names. Always set `uid` explicitly in datasource provisioning ConfigMaps (e.g., `uid: loki`). Dashboard JSON references datasources by `{"uid": "loki"}` — without the explicit UID, panels show "datasource not found".
 ```
 
 Add to **Deployment Lessons** under a new subsection **Alerting and notifications**:
@@ -978,7 +1042,7 @@ Each app follows the pattern: namespace, Deployment, Service, HTTPRoute, Kustomi
 | App | Purpose |
 |-----|---------|
 | whoami | Smoke test — validates ingress, TLS, and Gateway routing |
-| Headlamp | Read-only Kubernetes dashboard for visual cluster browsing and triage |
+| Headlamp | Kubernetes dashboard for visual cluster browsing and triage (cluster-admin, Authentik OIDC) |
 ```
 
 Add to the **Infrastructure components** table:
@@ -1028,4 +1092,4 @@ These steps require a running cluster. Run after pushing the branch and merging,
 
 4. **Log explorer dashboard**: Open Grafana → Dashboards → search "Log Explorer". Select a namespace from the dropdown. Confirm log volume histogram and log stream populate.
 
-5. **Headlamp**: Navigate to `headlamp.catinthehack.ca`. Confirm Authentik login prompt appears. After auth, generate a token: `kubectl create token headlamp-headlamp -n headlamp --duration=8760h`. Paste into Headlamp. Confirm read-only cluster browsing works.
+5. **Headlamp**: Navigate to `headlamp.catinthehack.ca`. Confirm Authentik OIDC login flow triggers automatically (no manual token paste). After login, confirm cluster browsing works with full CRD visibility. Prerequisite: Authentik application and provider for Headlamp must be created first, and OIDC credentials filled into `mise run sops:edit kubernetes/apps/headlamp/secret.enc.yaml`.
