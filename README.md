@@ -143,7 +143,7 @@ These choices are difficult to reverse once workloads depend on them. Decide bef
 23. **Hubble observability** — Cilium's service map and flow visibility via eBPF
 24. **PersistentVolume backups** — Volsync for scheduled PVC replication to NAS
 25. **Cluster-wide backups** — Velero for scheduled backup and restore of all cluster resources
-26. **Cluster dashboard** — Headlamp for visual cluster inspection behind auth
+26. ~~**Cluster dashboard** — Headlamp for visual cluster inspection behind auth~~
 27. **Thanos sidecar** — Long-term metrics storage and multi-cluster query federation
 
 ### Phase 5: Platform Maturity

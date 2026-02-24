@@ -77,3 +77,33 @@ data:
           name: Forgejo
           provider: !KeyOf forgejo-oidc-provider
           meta_launch_url: https://git.catinthehack.ca/
+
+  04-headlamp-oidc-provider.yaml: |
+    version: 1
+    metadata:
+      name: Headlamp OIDC Provider
+    entries:
+      - model: authentik_providers_oauth2.oauth2provider
+        id: headlamp-provider
+        identifiers:
+          name: headlamp
+        attrs:
+          client_type: confidential
+          client_id: !Env [HEADLAMP_OIDC_CLIENT_ID]
+          client_secret: !Env [HEADLAMP_OIDC_CLIENT_SECRET]
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-authentication-flow]]
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-invalidation-flow]]
+          redirect_uris: "https://headlamp.catinthehack.ca/oidc-callback"
+          signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+          property_mappings:
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, profile]]
+            - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
+
+      - model: authentik_core.application
+        identifiers:
+          slug: headlamp
+        attrs:
+          name: Headlamp
+          provider: !KeyOf headlamp-provider
+          meta_launch_url: "https://headlamp.catinthehack.ca"

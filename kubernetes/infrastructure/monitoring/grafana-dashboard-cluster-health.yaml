@@ -1,0 +1,348 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-cluster-health
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  cluster-health.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "title": "Node Vitals",
+          "type": "row"
+        },
+        {
+          "type": "stat",
+          "title": "CPU Usage",
+          "gridPos": { "h": 4, "w": 8, "x": 0, "y": 1 },
+          "targets": [
+            {
+              "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "type": "stat",
+          "title": "Memory Usage",
+          "gridPos": { "h": 4, "w": 8, "x": 8, "y": 1 },
+          "targets": [
+            {
+              "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "type": "stat",
+          "title": "Ephemeral Disk Usage",
+          "gridPos": { "h": 4, "w": 8, "x": 16, "y": 1 },
+          "targets": [
+            {
+              "expr": "(1 - node_filesystem_avail_bytes{mountpoint=\"/var\",fstype!=\"\"} / node_filesystem_size_bytes{mountpoint=\"/var\",fstype!=\"\"}) * 100",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 90 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+          "title": "Workload Status",
+          "type": "row"
+        },
+        {
+          "type": "stat",
+          "title": "Pods Running",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 6 },
+          "targets": [
+            {
+              "expr": "sum(kube_pod_status_phase{phase=\"Running\"})",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{ "color": "green", "value": null }]
+              }
+            },
+            "overrides": []
+          },
+          "options": { "colorMode": "value", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "type": "stat",
+          "title": "Pods Not Ready",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 6 },
+          "targets": [
+            {
+              "expr": "sum(kube_pod_status_phase{phase=~\"Pending|Unknown|Failed\"}) or vector(0)",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "type": "stat",
+          "title": "Crash-Looping Pods",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 6 },
+          "targets": [
+            {
+              "expr": "count(max_over_time(kube_pod_container_status_waiting_reason{reason=\"CrashLoopBackOff\"}[5m]) >= 1) or vector(0)",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "type": "table",
+          "title": "Recent Restarts (last 1h)",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 6 },
+          "targets": [
+            {
+              "expr": "sort_desc(increase(kube_pod_container_status_restarts_total[1h]) > 0)",
+              "refId": "A",
+              "format": "table",
+              "instant": true
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "container": true,
+                  "endpoint": true,
+                  "instance": true,
+                  "job": true,
+                  "service": true,
+                  "uid": true
+                },
+                "renameByName": {
+                  "namespace": "Namespace",
+                  "pod": "Pod",
+                  "Value": "Restarts"
+                }
+              }
+            }
+          ],
+          "fieldConfig": { "defaults": {}, "overrides": [] },
+          "options": { "sortBy": [{ "displayName": "Restarts", "desc": true }] }
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 10 },
+          "title": "PVC Usage",
+          "type": "row"
+        },
+        {
+          "type": "bargauge",
+          "title": "PersistentVolumeClaim Usage",
+          "gridPos": { "h": 6, "w": 24, "x": 0, "y": 11 },
+          "targets": [
+            {
+              "expr": "(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * 100",
+              "refId": "A",
+              "legendFormat": "{{ namespace }}/{{ persistentvolumeclaim }}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 70 },
+                  { "color": "red", "value": 85 }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } }
+        },
+        {
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+          "title": "Flux GitOps Sync",
+          "type": "row"
+        },
+        {
+          "type": "table",
+          "title": "Kustomizations",
+          "gridPos": { "h": 6, "w": 12, "x": 0, "y": 18 },
+          "targets": [
+            {
+              "expr": "gotk_reconcile_condition{type=\"Ready\",kind=\"Kustomization\"}",
+              "refId": "A",
+              "format": "table",
+              "instant": true
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "endpoint": true,
+                  "instance": true,
+                  "job": true,
+                  "kind": true,
+                  "pod": true,
+                  "service": true,
+                  "type": true,
+                  "exported_namespace": false
+                },
+                "renameByName": {
+                  "exported_namespace": "Namespace",
+                  "name": "Name",
+                  "status": "Ready",
+                  "Value": "Active"
+                }
+              }
+            }
+          ],
+          "fieldConfig": { "defaults": {}, "overrides": [] },
+          "options": {}
+        },
+        {
+          "type": "table",
+          "title": "HelmReleases",
+          "gridPos": { "h": 6, "w": 12, "x": 12, "y": 18 },
+          "targets": [
+            {
+              "expr": "gotk_reconcile_condition{type=\"Ready\",kind=\"HelmRelease\"}",
+              "refId": "A",
+              "format": "table",
+              "instant": true
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "endpoint": true,
+                  "instance": true,
+                  "job": true,
+                  "kind": true,
+                  "pod": true,
+                  "service": true,
+                  "type": true,
+                  "exported_namespace": false
+                },
+                "renameByName": {
+                  "exported_namespace": "Namespace",
+                  "name": "Name",
+                  "status": "Ready",
+                  "Value": "Active"
+                }
+              }
+            }
+          ],
+          "fieldConfig": { "defaults": {}, "overrides": [] },
+          "options": {}
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 39,
+      "tags": ["cloudlab", "cluster-health"],
+      "templating": { "list": [] },
+      "time": { "from": "now-6h", "to": "now" },
+      "title": "Cluster Health",
+      "uid": "cloudlab-cluster-health"
+    }

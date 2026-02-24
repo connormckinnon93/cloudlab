@@ -74,6 +74,7 @@ mise run dns:unset        # Revert local DNS to DHCP defaults
 | `tests/e2e/` | Chainsaw E2E tests against live cluster (Flux health, DNS, TLS, auth) |
 | `kubernetes/infrastructure/forgejo/` | Forgejo server, Actions runner, and push mirror to GitHub |
 | `kubernetes/apps/renovate/` | Renovate automated dependency updater (CronJob) |
+| `kubernetes/apps/headlamp/` | Headlamp Kubernetes dashboard (cluster-admin, Authentik OIDC) |
 | `.forgejo/workflows/check.yml` | Forgejo Actions CI — runs `mise run check` on PRs (mirrors `.github/workflows/check.yml`) |
 | `renovate.json` | Renovate in-repo config — Flux manager file patterns, package grouping rules |
 | `.kube-linter.yaml` | kube-linter configuration and exclusions |
@@ -181,6 +182,14 @@ Three test tiers: static (`mise run check` — terraform test, kyverno CLI, kube
 - **Flux source HTTPS with token auth**: After cutover, Flux reconciles from Forgejo via `https://git.catinthehack.ca` with a PAT. The `flux bootstrap gitea` command uses `--token-auth` (no SSH deploy key). The PAT is stored in the `flux-system` namespace Secret created by bootstrap.
 
 - **Local DNS tasks**: `dns:set` and `dns:unset` configure macOS DNS on Ethernet, USB LAN, and Wi-Fi interfaces. Requires AdGuard Home running at `192.168.20.100`. Use `dns:unset` to revert to DHCP if DNS breaks. Both tasks print verification output after applying changes.
+- **Pushover notification templates**: HelmRelease values are data, not Helm templates. Use direct Go template syntax (`{{ .CommonLabels.alertname }}`) in Alertmanager receiver configs — do NOT escape with `{{ "{{" }}`. Named templates defined in `alertmanager.templateFiles` keep the receiver config clean.
+- **Grafana dashboard provisioning**: Dashboards defined as JSON inside ConfigMaps labeled `grafana_dashboard: "1"`. Grafana's sidecar auto-discovers them in the monitoring namespace. Same mechanism as datasource auto-discovery.
+- **Headlamp OIDC auth**: Headlamp supports native OIDC via `config.oidc` in the Helm values. Configured to authenticate against Authentik (`issuerURL: https://auth.catinthehack.ca/application/o/headlamp/`). OIDC credentials stored in a SOPS-encrypted Secret, injected via `valuesFrom`. Kyverno forward-auth still applies to the HTTPRoute, but the OIDC login replaces the manual ServiceAccount token flow.
+- **Headlamp cluster-admin RBAC**: Uses `cluster-admin` ClusterRole via `clusterRoleBinding.clusterRoleName: cluster-admin`. Full visibility into all resources including CRDs. The Helm chart deduplicates the ServiceAccount name when release name matches chart name — SA is `headlamp`, not `headlamp-headlamp`.
+- **TalosOS writable partition**: TalosOS uses a read-only squashfs root (`/`). The writable partition is `/var`. Node-exporter excludes squashfs and overlay filesystems, so `mountpoint="/"` produces no data. Use `mountpoint="/var"` for disk space alerts and dashboard panels.
+- **Grafana datasource UIDs**: Auto-generated UIDs are not deterministic and don't match human-readable names. Always set `uid` explicitly in datasource provisioning ConfigMaps (e.g., `uid: loki`). Dashboard JSON references datasources by `{"uid": "loki"}` — without the explicit UID, panels show "datasource not found".
+- **Authentik OIDC blueprint pattern**: For services that support native OIDC, create a blueprint entry with `authentik_providers_oauth2.oauth2provider` model. Store the client ID and secret in the `authentik-secrets` SOPS Secret, expose them via `global.env` `secretKeyRef`, and reference them in the blueprint via `!Env [KEY_NAME]`. This keeps the ConfigMap free of secrets while the public repo remains safe. The same credentials go into the service's own SOPS Secret for injection via Flux `valuesFrom`.
+- **Authentik scope mappings model name**: OAuth2 scope mappings use `authentik_providers_oauth2.scopemapping` (not `authentik_providers_oauth2.oauth2scopemapping`). Reference built-in scopes via `!Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]`.
 
 ## Deployment Lessons
 
@@ -196,6 +205,9 @@ Patterns learned from building this project that apply to all future work.
 ### SOPS secrets
 - **Create secrets with placeholder values**, encrypt them, and commit. Document what the user must fill in and how (`mise run sops:edit <path>`). This lets CI validate the resource structure while real credentials arrive later.
 - **Collect credentials before starting implementation.** Asking mid-flow interrupts momentum. List prerequisites (accounts to create, keys to generate) in the plan and resolve them first.
+- **Use `sops set` to add keys without decrypting.** `sops set <file> '["stringData"]["KEY"]' '"value"'` modifies individual keys in an encrypted file without exposing other values to stdout. Safer than decrypt-edit-encrypt for automation and CI contexts. Use this when adding new keys to an existing Secret.
+- **Recreate SOPS files with placeholder-only content.** When a Secret contains only placeholder values (no real secrets yet), overwrite it with the real plaintext YAML and run `sops encrypt -i`. Simpler than `sops set` for each key, and no decryption occurs.
+- **Symlink `.age-key.txt` into worktrees.** The age key file is gitignored and absent from new worktrees. SOPS operations fail without it. Create a symlink to the main repo's key (`ln -s /path/to/main/.age-key.txt .age-key.txt`), run SOPS commands, then remove the symlink. Automate this in worktree setup scripts.
 
 ### Infrastructure-as-code
 - **Pin exact Helm chart versions at implementation time.** Plans should specify major version ranges (e.g., `82.x`). The implementing agent looks up the latest patch version when writing the HelmRelease.
@@ -246,6 +258,8 @@ Patterns learned from building this project that apply to all future work.
 
 - **Set `authentik_host_browser` when `authentik_host` is internal.** The outpost uses `authentik_host` for API communication and browser redirects. When `authentik_host` points to an in-cluster service name, the browser receives an unresolvable URL. Set `authentik_host_browser` to the external URL (`https://auth.catinthehack.ca`) in the outpost blueprint's `config` block. Both fields are required whenever internal and external URLs differ.
 - **Outpost pod restarts invalidate in-flight auth flows.** The proxy outpost stores OAuth state in ephemeral filesystem sessions. Restarting the pod wipes all sessions — any user mid-login receives a 400 "mismatched session ID" error because the callback's state JWT references a destroyed session. After outpost restarts, tell affected users to retry from scratch (clear cookies or incognito). Restart the outpost pod after blueprint changes: `kubectl rollout restart deploy/ak-outpost-traefik-outpost -n authentik`.
+- **Use `!Env` for secrets in blueprints, not inline values.** Blueprint ConfigMaps are plaintext and committed to a public repo. Inject credentials through pod environment variables (`global.env` with `secretKeyRef`) and reference them via `!Env [VAR_NAME]` in the blueprint. This keeps the blueprint declarative while the actual credentials stay in SOPS-encrypted Secrets.
+- **Reuse `authentik-secrets` for non-Authentik credentials when the worker needs them.** The `global.env` mechanism exposes any Secret key as an environment variable in the worker pod. Adding Headlamp OIDC credentials to `authentik-secrets` avoids creating a cross-namespace Secret reference. The worker reads them via `!Env`; the target service reads them from its own namespace-local Secret.
 
 ### Worktree and tooling
 - **Symlink shared secrets into worktrees.** Git worktrees don't share gitignored files (`.age-key.txt`, decrypted kubeconfig). Symlink them from the main repo: `ln -s /path/to/main/.age-key.txt .age-key.txt`. Without the age key, `sops` and `mise run config:decrypt` fail silently or with unhelpful errors.
@@ -253,3 +267,8 @@ Patterns learned from building this project that apply to all future work.
 - **Run `mise trust` and `mise run tf init` in new worktrees.** Worktrees start with untrusted config and no `.terraform/` directory. Both commands must run before `mise run check` passes. `tflint --init` may also be needed if plugins aren't cached globally.
 - **Helm chart registries migrate — always verify URLs.** The Forgejo Helm chart moved from `https://codeberg.org/forgejo-helm/pages/` to `oci://code.forgejo.org/forgejo-helm` in January 2026. The plan's URL returned 404. Run `helm show chart <url>` before writing HelmRepository resources to catch stale URLs early.
 - **Cross-namespace credential sharing requires duplication.** Kubernetes Secrets are namespace-scoped. When two components in different namespaces need the same credential (e.g., OIDC client secret shared between Authentik and Forgejo), the value must exist in both Secrets. Generate once, write to both via `sops --set`. Document the pairing so future rotations update both.
+
+### Alerting and notifications
+- **Do not escape Go templates in HelmRelease values.** `{{ "{{" }}` is Helm chart template escaping, not HelmRelease values escaping. Values are data — Flux and Helm pass them through without template processing. Use `{{ .CommonLabels.alertname }}` directly. The double-escaping produces literal template text in Alertmanager output.
+- **Use `templateFiles` for complex Alertmanager notification formatting.** Define named templates in `alertmanager.templateFiles` and reference them via `{{ template "name" . }}` in receiver configs. Cleaner than inline template logic.
+- **Start with few alert rules and expand.** A noisy alerting setup trains operators to ignore alerts. Begin with 8-10 rules covering critical failures (node down, disk full, crash loops), then add warning-tier rules based on observed gaps.
