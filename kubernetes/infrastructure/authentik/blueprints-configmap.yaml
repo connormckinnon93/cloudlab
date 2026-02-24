@@ -44,4 +44,5 @@ data:
             - !Find [authentik_providers_proxy.proxyprovider, [name, traefik-forward-auth]]
           config:
             authentik_host: http://authentik-server.authentik.svc:80
+            authentik_host_browser: https://auth.catinthehack.ca
             kubernetes_namespace: authentik
