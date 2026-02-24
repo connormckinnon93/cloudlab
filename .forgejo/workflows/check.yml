@@ -1,0 +1,28 @@
+name: Check
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: jdx/mise-action@6d1e696aa24c1aa1bcc1adea0212707c71ab78a8 # v3.6.1
+
+      - name: Initialize Terraform providers
+        working-directory: terraform
+        run: terraform init -backend=false
+
+      - name: Initialize tflint plugins
+        working-directory: terraform
+        run: tflint --init
+
+      - name: Run checks
+        run: mise run check
