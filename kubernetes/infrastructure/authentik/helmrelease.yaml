@@ -53,6 +53,16 @@ spec:
       env:
         - name: AUTHENTIK_ERROR_REPORTING__ENABLED
           value: "false"
+        - name: FORGEJO_OIDC_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: authentik-secrets
+              key: FORGEJO_OIDC_CLIENT_ID
+        - name: FORGEJO_OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: authentik-secrets
+              key: FORGEJO_OIDC_CLIENT_SECRET
         - name: HEADLAMP_OIDC_CLIENT_ID
           valueFrom:
             secretKeyRef:
