@@ -47,7 +47,7 @@ spec:
           DOMAIN: git.catinthehack.ca
           ROOT_URL: https://git.catinthehack.ca/
           SSH_DOMAIN: git.catinthehack.ca
-          SSH_PORT: "2222"
+          SSH_PORT: "22"
           START_SSH_SERVER: true
           LFS_START_SERVER: true
 
@@ -96,6 +96,7 @@ spec:
       ssh:
         type: ClusterIP
         port: 2222
+        hostPort: 22
 
     resources:
       requests:
