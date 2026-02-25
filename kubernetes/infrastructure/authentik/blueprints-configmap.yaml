@@ -64,7 +64,8 @@ data:
           invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
           signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
           redirect_uris:
-            - https://git.catinthehack.ca/user/oauth2/Authentik/callback
+            - matching_mode: strict
+              url: https://git.catinthehack.ca/user/oauth2/Authentik/callback
           property_mappings:
             - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
             - !Find [authentik_providers_oauth2.scopemapping, [scope_name, email]]
@@ -93,7 +94,9 @@ data:
           client_secret: !Env HEADLAMP_OIDC_CLIENT_SECRET
           authorization_flow: !Find [authentik_flows.flow, [slug, default-authentication-flow]]
           invalidation_flow: !Find [authentik_flows.flow, [slug, default-invalidation-flow]]
-          redirect_uris: "https://headlamp.catinthehack.ca/oidc-callback"
+          redirect_uris:
+            - matching_mode: strict
+              url: https://headlamp.catinthehack.ca/oidc-callback
           signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
           property_mappings:
             - !Find [authentik_providers_oauth2.scopemapping, [scope_name, openid]]
